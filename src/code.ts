@@ -2,8 +2,6 @@ import Hypher from "hypher";
 import ruPatterns from "hyphenation.ru";
 
 const SOFT_HYPHEN = "\u00AD";
-const INSERT_MARK = "\u200B"; // marker to remove only what plugin inserted
-const INSERTED_HYPHEN = `-${INSERT_MARK}`;
 const hypher = new Hypher(ruPatterns as any);
 
 function collectTextNodes(nodes: readonly SceneNode[]): TextNode[] {
@@ -47,9 +45,8 @@ function hyphenateWord(word: string): string {
   const parts = hypher.hyphenate(clean);
   if (!parts || parts.length <= 1) return clean;
 
-  // Use a visible hyphen to match Russian перенос: "ком-\u200Bпью-\u200Bтер-\u200Bный".
-  // The zero-width marker makes it safe to remove later without touching real hyphens.
-  return parts.join(INSERTED_HYPHEN);
+  // Soft hyphen shows a hyphen ONLY when the word is actually broken at line end.
+  return parts.join(SOFT_HYPHEN);
 }
 
 function hyphenateText(text: string): string {
@@ -61,7 +58,7 @@ function hyphenateText(text: string): string {
 }
 
 function removeHyphenationMarks(text: string): string {
-  // Remove both: legacy soft hyphens and the visible hyphen+marker inserted by this plugin.
+  // Remove both: soft hyphens and the legacy visible hyphen+marker used by a previous version.
   return text.replace(/-\u200B/g, "").replace(/\u00AD/g, "");
 }
 

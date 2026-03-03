@@ -154,8 +154,7 @@
   // src/code.ts
   var import_hypher = __toESM(require_hypher());
   var import_hyphenation = __toESM(require_ru());
-  var INSERT_MARK = "\u200B";
-  var INSERTED_HYPHEN = `-${INSERT_MARK}`;
+  var SOFT_HYPHEN = "\xAD";
   var hypher = new import_hypher.default(import_hyphenation.default);
   function collectTextNodes(nodes) {
     const out = [];
@@ -189,7 +188,7 @@
     if (!shouldHyphenateWord(clean)) return clean;
     const parts = hypher.hyphenate(clean);
     if (!parts || parts.length <= 1) return clean;
-    return parts.join(INSERTED_HYPHEN);
+    return parts.join(SOFT_HYPHEN);
   }
   function hyphenateText(text) {
     const clean = text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
