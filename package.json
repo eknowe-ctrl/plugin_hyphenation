@@ -1,0 +1,20 @@
+{
+  "name": "figma-ru-hyphenation-plugin",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Figma plugin: apply Russian hyphenation (soft hyphens) to selected text",
+  "scripts": {
+    "build": "esbuild src/code.ts --bundle --outfile=dist/code.js --format=iife --target=es2017",
+    "build:watch": "esbuild src/code.ts --bundle --outfile=dist/code.js --format=iife --target=es2017 --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "hypher": "^0.2.5",
+    "hyphenation.ru": "^0.2.1"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.95.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3"
+  }
+}
