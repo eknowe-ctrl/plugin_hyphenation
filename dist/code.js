@@ -201,25 +201,32 @@
   function removeHyphenationMarks(text) {
     return stripAllHyphenationMarks(text);
   }
-  function getPrimaryFontName(node) {
+  function getFontForMeasurement(node) {
+    if (node.characters.length > 0) {
+      const f = node.getRangeFontName(0, 1);
+      if (f !== figma.mixed) return f;
+    }
     if (node.fontName !== figma.mixed) return node.fontName;
-    const end = Math.max(1, node.characters.length);
-    const fonts = node.getRangeAllFontNames(0, end);
-    return fonts[0];
+    return { family: "Inter", style: "Regular" };
   }
-  function getPrimaryFontSize(node) {
+  function getFontSizeForMeasurement(node) {
+    if (node.characters.length > 0) {
+      const s = node.getRangeFontSize(0, 1);
+      if (typeof s === "number") return s;
+    }
     if (node.fontSize !== figma.mixed) return node.fontSize;
-    if (node.characters.length === 0) return 12;
-    const size = node.getRangeFontSize(0, 1);
-    return typeof size === "number" ? size : 12;
+    return 12;
   }
-  function createMeasurer(node) {
+  async function createMeasurer(node) {
     const temp = figma.createText();
     figma.currentPage.appendChild(temp);
     temp.visible = false;
     temp.textAutoResize = "WIDTH_AND_HEIGHT";
-    temp.fontName = getPrimaryFontName(node);
-    temp.fontSize = getPrimaryFontSize(node);
+    const fontName = getFontForMeasurement(node);
+    await figma.loadFontAsync(fontName);
+    temp.fontName = fontName;
+    temp.fontSize = getFontSizeForMeasurement(node);
+    temp.characters = " ";
     if (node.letterSpacing !== figma.mixed) temp.letterSpacing = node.letterSpacing;
     if (node.lineHeight !== figma.mixed && node.lineHeight) temp.lineHeight = node.lineHeight;
     const cache = /* @__PURE__ */ new Map();
@@ -238,6 +245,10 @@
       }
     };
     return { measure, cleanup };
+  }
+  function formatError(e) {
+    if (e instanceof Error) return e.message || String(e);
+    return String(e);
   }
   function tokenizeInline(text) {
     var _a;
@@ -362,6 +373,8 @@
     }
     let changed = 0;
     let failed = 0;
+    let skippedAutoWidth = 0;
+    let firstError = null;
     for (const node of textNodes) {
       try {
         await loadAllFonts(node);
@@ -383,10 +396,11 @@
           next = hyphenateTextSoft(base);
         } else {
           if (node.textAutoResize === "WIDTH_AND_HEIGHT") {
+            skippedAutoWidth += 1;
             next = base;
           } else {
             const maxWidth = node.width;
-            const measurer = createMeasurer(node);
+            const measurer = await createMeasurer(node);
             try {
               next = wrapWithVisibleHyphens(base, maxWidth, measurer.measure);
             } finally {
@@ -400,6 +414,8 @@
           changed += 1;
         }
       } catch (e) {
+        if (!firstError) firstError = formatError(e);
+        console.error(e);
         failed += 1;
       }
     }
@@ -409,7 +425,9 @@
     );
     parts.push(`\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${textNodes.length} \u0441\u043B\u043E\u0451\u0432`);
     parts.push(`\u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E ${changed}`);
+    if (skippedAutoWidth > 0) parts.push(`\u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E Auto width ${skippedAutoWidth}`);
     if (failed > 0) parts.push(`\u043E\u0448\u0438\u0431\u043E\u043A ${failed}`);
+    if (failed > 0 && firstError) parts.push(`\u043E\u0448\u0438\u0431\u043A\u0430: ${firstError}`.slice(0, 80));
     figma.notify(parts.join(", "));
     figma.closePlugin();
   }

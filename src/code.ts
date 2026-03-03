@@ -79,28 +79,35 @@ type Measurer = {
   cleanup: () => void;
 };
 
-function getPrimaryFontName(node: TextNode): FontName {
+function getFontForMeasurement(node: TextNode): FontName {
+  if (node.characters.length > 0) {
+    const f = node.getRangeFontName(0, 1);
+    if (f !== figma.mixed) return f;
+  }
   if (node.fontName !== figma.mixed) return node.fontName;
-  const end = Math.max(1, node.characters.length);
-  const fonts = node.getRangeAllFontNames(0, end);
-  return fonts[0];
+  return { family: "Inter", style: "Regular" };
 }
 
-function getPrimaryFontSize(node: TextNode): number {
+function getFontSizeForMeasurement(node: TextNode): number {
+  if (node.characters.length > 0) {
+    const s = node.getRangeFontSize(0, 1);
+    if (typeof s === "number") return s;
+  }
   if (node.fontSize !== figma.mixed) return node.fontSize;
-  if (node.characters.length === 0) return 12;
-  const size = node.getRangeFontSize(0, 1);
-  return typeof size === "number" ? size : 12;
+  return 12;
 }
 
-function createMeasurer(node: TextNode): Measurer {
+async function createMeasurer(node: TextNode): Promise<Measurer> {
   const temp = figma.createText();
   figma.currentPage.appendChild(temp);
   temp.visible = false;
 
   temp.textAutoResize = "WIDTH_AND_HEIGHT";
-  temp.fontName = getPrimaryFontName(node);
-  temp.fontSize = getPrimaryFontSize(node);
+  const fontName = getFontForMeasurement(node);
+  await figma.loadFontAsync(fontName);
+  temp.fontName = fontName;
+  temp.fontSize = getFontSizeForMeasurement(node);
+  temp.characters = " ";
 
   // These properties exist on TextNode but can be "mixed".
   if ((node as any).letterSpacing !== figma.mixed) (temp as any).letterSpacing = (node as any).letterSpacing;
@@ -126,6 +133,11 @@ function createMeasurer(node: TextNode): Measurer {
   };
 
   return { measure, cleanup };
+}
+
+function formatError(e: unknown): string {
+  if (e instanceof Error) return e.message || String(e);
+  return String(e);
 }
 
 function tokenizeInline(text: string): string[] {
@@ -300,6 +312,8 @@ async function main() {
 
   let changed = 0;
   let failed = 0;
+  let skippedAutoWidth = 0;
+  let firstError: string | null = null;
 
   for (const node of textNodes) {
     try {
@@ -326,10 +340,11 @@ async function main() {
         // Visible mode: put hyphen ONLY at actual line breaks for the CURRENT width.
         // This works by inserting explicit "\n" after the hyphenation point.
         if (node.textAutoResize === "WIDTH_AND_HEIGHT") {
+          skippedAutoWidth += 1;
           next = base; // no wrapping in this mode
         } else {
           const maxWidth = node.width;
-          const measurer = createMeasurer(node);
+          const measurer = await createMeasurer(node);
           try {
             next = wrapWithVisibleHyphens(base, maxWidth, measurer.measure);
           } finally {
@@ -343,7 +358,10 @@ async function main() {
         node.setPluginData("ruHyph.lastApplied", next);
         changed += 1;
       }
-    } catch {
+    } catch (e) {
+      if (!firstError) firstError = formatError(e);
+      // Also log full error object for dev console.
+      console.error(e);
       failed += 1;
     }
   }
@@ -358,7 +376,9 @@ async function main() {
   );
   parts.push(`обработано ${textNodes.length} слоёв`);
   parts.push(`изменено ${changed}`);
+  if (skippedAutoWidth > 0) parts.push(`пропущено Auto width ${skippedAutoWidth}`);
   if (failed > 0) parts.push(`ошибок ${failed}`);
+  if (failed > 0 && firstError) parts.push(`ошибка: ${firstError}`.slice(0, 80));
 
   figma.notify(parts.join(", "));
   figma.closePlugin();
