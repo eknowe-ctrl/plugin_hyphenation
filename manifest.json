@@ -5,7 +5,7 @@
   "editorType": ["figma", "figjam"],
   "menu": [
     { "name": "Применить переносы (RU)", "command": "apply" },
-    { "name": "Удалить мягкие переносы", "command": "remove" }
+    { "name": "Удалить переносы (плагина)", "command": "remove" }
   ]
 }
 

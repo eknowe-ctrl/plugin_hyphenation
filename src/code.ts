@@ -2,6 +2,8 @@ import Hypher from "hypher";
 import ruPatterns from "hyphenation.ru";
 
 const SOFT_HYPHEN = "\u00AD";
+const INSERT_MARK = "\u200B"; // marker to remove only what plugin inserted
+const INSERTED_HYPHEN = `-${INSERT_MARK}`;
 const hypher = new Hypher(ruPatterns as any);
 
 function collectTextNodes(nodes: readonly SceneNode[]): TextNode[] {
@@ -39,25 +41,28 @@ function shouldHyphenateWord(word: string): boolean {
 }
 
 function hyphenateWord(word: string): string {
-  const clean = word.replace(/\u00AD/g, "");
+  const clean = word.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
   if (!shouldHyphenateWord(clean)) return clean;
 
   const parts = hypher.hyphenate(clean);
   if (!parts || parts.length <= 1) return clean;
 
-  return parts.join(SOFT_HYPHEN);
+  // Use a visible hyphen to match Russian перенос: "ком-\u200Bпью-\u200Bтер-\u200Bный".
+  // The zero-width marker makes it safe to remove later without touching real hyphens.
+  return parts.join(INSERTED_HYPHEN);
 }
 
 function hyphenateText(text: string): string {
-  // Remove any previously inserted soft hyphens first to avoid duplicates.
-  const clean = text.replace(/\u00AD/g, "");
+  // Remove any previously inserted marks first to avoid duplicates.
+  const clean = text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
 
   // Hyphenate sequences of Cyrillic letters. Words with '-' will be handled as separate parts.
   return clean.replace(/[А-Яа-яЁё]{5,}/g, (m: string) => hyphenateWord(m));
 }
 
-function removeSoftHyphens(text: string): string {
-  return text.replace(/\u00AD/g, "");
+function removeHyphenationMarks(text: string): string {
+  // Remove both: legacy soft hyphens and the visible hyphen+marker inserted by this plugin.
+  return text.replace(/-\u200B/g, "").replace(/\u00AD/g, "");
 }
 
 async function main() {
@@ -79,7 +84,7 @@ async function main() {
       await loadAllFonts(node);
       const next =
         mode === "remove"
-          ? removeSoftHyphens(node.characters)
+          ? removeHyphenationMarks(node.characters)
           : hyphenateText(node.characters);
       if (next !== node.characters) {
         node.characters = next;
@@ -92,7 +97,7 @@ async function main() {
 
   const parts: string[] = [];
   parts.push(
-    mode === "remove" ? "Готово: удалены мягкие переносы" : "Готово: применены переносы (RU)"
+    mode === "remove" ? "Готово: удалены переносы (плагина)" : "Готово: применены переносы (RU)"
   );
   parts.push(`обработано ${textNodes.length} слоёв`);
   parts.push(`изменено ${changed}`);

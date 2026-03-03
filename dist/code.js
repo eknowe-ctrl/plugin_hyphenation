@@ -154,7 +154,8 @@
   // src/code.ts
   var import_hypher = __toESM(require_hypher());
   var import_hyphenation = __toESM(require_ru());
-  var SOFT_HYPHEN = "\xAD";
+  var INSERT_MARK = "\u200B";
+  var INSERTED_HYPHEN = `-${INSERT_MARK}`;
   var hypher = new import_hypher.default(import_hyphenation.default);
   function collectTextNodes(nodes) {
     const out = [];
@@ -184,18 +185,18 @@
     return word.length >= 5 && /[А-Яа-яЁё]/.test(word);
   }
   function hyphenateWord(word) {
-    const clean = word.replace(/\u00AD/g, "");
+    const clean = word.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
     if (!shouldHyphenateWord(clean)) return clean;
     const parts = hypher.hyphenate(clean);
     if (!parts || parts.length <= 1) return clean;
-    return parts.join(SOFT_HYPHEN);
+    return parts.join(INSERTED_HYPHEN);
   }
   function hyphenateText(text) {
-    const clean = text.replace(/\u00AD/g, "");
+    const clean = text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
     return clean.replace(/[А-Яа-яЁё]{5,}/g, (m) => hyphenateWord(m));
   }
-  function removeSoftHyphens(text) {
-    return text.replace(/\u00AD/g, "");
+  function removeHyphenationMarks(text) {
+    return text.replace(/-\u200B/g, "").replace(/\u00AD/g, "");
   }
   async function main() {
     const mode = figma.command === "remove" ? "remove" : "apply";
@@ -211,7 +212,7 @@
     for (const node of textNodes) {
       try {
         await loadAllFonts(node);
-        const next = mode === "remove" ? removeSoftHyphens(node.characters) : hyphenateText(node.characters);
+        const next = mode === "remove" ? removeHyphenationMarks(node.characters) : hyphenateText(node.characters);
         if (next !== node.characters) {
           node.characters = next;
           changed += 1;
@@ -222,7 +223,7 @@
     }
     const parts = [];
     parts.push(
-      mode === "remove" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u0443\u0434\u0430\u043B\u0435\u043D\u044B \u043C\u044F\u0433\u043A\u0438\u0435 \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B" : "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (RU)"
+      mode === "remove" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u0443\u0434\u0430\u043B\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (\u043F\u043B\u0430\u0433\u0438\u043D\u0430)" : "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (RU)"
     );
     parts.push(`\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${textNodes.length} \u0441\u043B\u043E\u0451\u0432`);
     parts.push(`\u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E ${changed}`);
