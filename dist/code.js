@@ -156,8 +156,6 @@
   var import_hyphenation = __toESM(require_ru());
   var SOFT_HYPHEN = "\xAD";
   var WORD_JOINER = "\u2060";
-  var ZERO_WIDTH_SPACE = "\u200B";
-  var VISIBLE_HYPHENATION = `${WORD_JOINER}-${ZERO_WIDTH_SPACE}`;
   var hypher = new import_hypher.default(import_hyphenation.default);
   function collectTextNodes(nodes) {
     const out = [];
@@ -187,24 +185,171 @@
     return word.length >= 5 && /[А-Яа-яЁё]/.test(word);
   }
   function stripAllHyphenationMarks(text) {
-    return text.replace(/\u00AD/g, "").replace(/\u2060-\u200B/g, "").replace(/-\u200B/g, "");
+    return text.replace(/\u00AD/g, "").replace(/\u2060-\u200B/g, "").replace(/-\u200B/g, "").replace(/\u2060-\n/g, "").replace(/\u2060/g, "");
   }
-  function hyphenateWord(word, mode) {
+  function hyphenateWordSoft(word) {
     const clean = stripAllHyphenationMarks(word);
     if (!shouldHyphenateWord(clean)) return clean;
     const parts = hypher.hyphenate(clean);
     if (!parts || parts.length <= 1) return clean;
-    if (mode === "apply-soft") {
-      return parts.join(SOFT_HYPHEN);
-    }
-    return parts.join(VISIBLE_HYPHENATION);
+    return parts.join(SOFT_HYPHEN);
   }
-  function hyphenateText(text, mode) {
+  function hyphenateTextSoft(text) {
     const clean = stripAllHyphenationMarks(text);
-    return clean.replace(/[А-Яа-яЁё]{5,}/g, (m) => hyphenateWord(m, mode));
+    return clean.replace(/[А-Яа-яЁё]{5,}/g, (m) => hyphenateWordSoft(m));
   }
   function removeHyphenationMarks(text) {
     return stripAllHyphenationMarks(text);
+  }
+  function getPrimaryFontName(node) {
+    if (node.fontName !== figma.mixed) return node.fontName;
+    const end = Math.max(1, node.characters.length);
+    const fonts = node.getRangeAllFontNames(0, end);
+    return fonts[0];
+  }
+  function getPrimaryFontSize(node) {
+    if (node.fontSize !== figma.mixed) return node.fontSize;
+    if (node.characters.length === 0) return 12;
+    const size = node.getRangeFontSize(0, 1);
+    return typeof size === "number" ? size : 12;
+  }
+  function createMeasurer(node) {
+    const temp = figma.createText();
+    figma.currentPage.appendChild(temp);
+    temp.visible = false;
+    temp.textAutoResize = "WIDTH_AND_HEIGHT";
+    temp.fontName = getPrimaryFontName(node);
+    temp.fontSize = getPrimaryFontSize(node);
+    if (node.letterSpacing !== figma.mixed) temp.letterSpacing = node.letterSpacing;
+    if (node.lineHeight !== figma.mixed && node.lineHeight) temp.lineHeight = node.lineHeight;
+    const cache = /* @__PURE__ */ new Map();
+    const measure = (line) => {
+      const cached = cache.get(line);
+      if (cached !== void 0) return cached;
+      temp.characters = line.length === 0 ? " " : line;
+      const w = temp.width;
+      cache.set(line, w);
+      return w;
+    };
+    const cleanup = () => {
+      try {
+        temp.remove();
+      } catch (e) {
+      }
+    };
+    return { measure, cleanup };
+  }
+  function tokenizeInline(text) {
+    var _a;
+    return (_a = text.match(/[^\S\r\n]+|[^\s]+/g)) != null ? _a : [];
+  }
+  function splitTokenForHyphenation(token) {
+    const m = token.match(/^([^А-Яа-яЁё]*)([А-Яа-яЁё]{5,})([^А-Яа-яЁё]*)$/);
+    if (!m) return null;
+    return { prefix: m[1], word: m[2], suffix: m[3] };
+  }
+  function findBreakByChars(currentLine, prefix, word, maxWidth, measure) {
+    let lo = 1;
+    let hi = word.length;
+    let best = 0;
+    while (lo <= hi) {
+      const mid = lo + hi >> 1;
+      const left = word.slice(0, mid);
+      const candidate = currentLine + prefix + left + "-";
+      if (measure(candidate) <= maxWidth) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (best <= 0) return null;
+    return { left: word.slice(0, best), right: word.slice(best) };
+  }
+  function findHyphenationSplit(currentLine, token, maxWidth, measure) {
+    const parts = splitTokenForHyphenation(token);
+    if (!parts) return null;
+    const { prefix, word, suffix } = parts;
+    const syllables = hypher.hyphenate(word);
+    if (!syllables || syllables.length <= 1) return null;
+    let bestIdx = -1;
+    let leftWord = "";
+    for (let i = 1; i < syllables.length; i++) {
+      const candidateLeftWord = syllables.slice(0, i).join("");
+      const candidateLine = currentLine + prefix + candidateLeftWord + "-";
+      if (measure(candidateLine) <= maxWidth) {
+        bestIdx = i;
+        leftWord = candidateLeftWord;
+      } else {
+        break;
+      }
+    }
+    if (bestIdx === -1) {
+      const byChars = findBreakByChars(currentLine, prefix, word, maxWidth, measure);
+      if (!byChars) return null;
+      return {
+        leftLine: currentLine + prefix + byChars.left + WORD_JOINER + "-",
+        remainderToken: byChars.right + suffix
+      };
+    }
+    const rightWord = syllables.slice(bestIdx).join("");
+    return {
+      leftLine: currentLine + prefix + leftWord + WORD_JOINER + "-",
+      remainderToken: rightWord + suffix
+    };
+  }
+  function wrapWithVisibleHyphens(text, maxWidth, measure) {
+    const base = stripAllHyphenationMarks(text);
+    const paragraphs = base.split("\n");
+    const outParas = [];
+    for (const para of paragraphs) {
+      const tokens = tokenizeInline(para);
+      let line = "";
+      let out = "";
+      for (let i = 0; i < tokens.length; i++) {
+        const tok = tokens[i];
+        if (line.length === 0) {
+          if (measure(tok) <= maxWidth) {
+            line = tok;
+            continue;
+          }
+          let rest = tok;
+          while (rest.length > 0 && measure(rest) > maxWidth) {
+            const split2 = findHyphenationSplit("", rest, maxWidth, measure);
+            if (!split2) break;
+            out += split2.leftLine + "\n";
+            rest = split2.remainderToken;
+          }
+          line = rest;
+          continue;
+        }
+        if (measure(line + tok) <= maxWidth) {
+          line += tok;
+          continue;
+        }
+        const split = findHyphenationSplit(line, tok, maxWidth, measure);
+        if (split) {
+          out += split.leftLine + "\n";
+          line = split.remainderToken;
+          continue;
+        }
+        out += line + "\n";
+        line = "";
+        i -= 1;
+      }
+      out += line;
+      outParas.push(out);
+    }
+    return outParas.join("\n");
+  }
+  function getBaseTextForNode(node) {
+    const storedOriginal = node.getPluginData("ruHyph.original");
+    const storedLast = node.getPluginData("ruHyph.lastApplied");
+    const current = node.characters;
+    if (!storedOriginal || !storedLast || current !== storedLast) {
+      return { base: stripAllHyphenationMarks(current), shouldStore: true };
+    }
+    return { base: storedOriginal, shouldStore: false };
   }
   async function main() {
     const mode = figma.command === "remove" ? "remove" : figma.command === "apply-soft" ? "apply-soft" : "apply-visible";
@@ -220,9 +365,38 @@
     for (const node of textNodes) {
       try {
         await loadAllFonts(node);
-        const next = mode === "remove" ? removeHyphenationMarks(node.characters) : hyphenateText(node.characters, mode);
+        if (mode === "remove") {
+          const original = node.getPluginData("ruHyph.original");
+          const next2 = original ? original : removeHyphenationMarks(node.characters);
+          if (next2 !== node.characters) {
+            node.characters = next2;
+            changed += 1;
+          }
+          node.setPluginData("ruHyph.original", "");
+          node.setPluginData("ruHyph.lastApplied", "");
+          continue;
+        }
+        const { base, shouldStore } = getBaseTextForNode(node);
+        if (shouldStore) node.setPluginData("ruHyph.original", base);
+        let next;
+        if (mode === "apply-soft") {
+          next = hyphenateTextSoft(base);
+        } else {
+          if (node.textAutoResize === "WIDTH_AND_HEIGHT") {
+            next = base;
+          } else {
+            const maxWidth = node.width;
+            const measurer = createMeasurer(node);
+            try {
+              next = wrapWithVisibleHyphens(base, maxWidth, measurer.measure);
+            } finally {
+              measurer.cleanup();
+            }
+          }
+        }
         if (next !== node.characters) {
           node.characters = next;
+          node.setPluginData("ruHyph.lastApplied", next);
           changed += 1;
         }
       } catch (e) {
@@ -231,7 +405,7 @@
     }
     const parts = [];
     parts.push(
-      mode === "remove" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u0443\u0434\u0430\u043B\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (\u043F\u043B\u0430\u0433\u0438\u043D\u0430)" : mode === "apply-soft" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043C\u044F\u0433\u043A\u0438\u0435 \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (RU)" : "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0441 \u0434\u0435\u0444\u0438\u0441\u043E\u043C (RU)"
+      mode === "remove" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u0443\u0434\u0430\u043B\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (\u043F\u043B\u0430\u0433\u0438\u043D\u0430)" : mode === "apply-soft" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043C\u044F\u0433\u043A\u0438\u0435 \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (RU)" : "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0441 \u0434\u0435\u0444\u0438\u0441\u043E\u043C (RU) \u043F\u043E \u0442\u0435\u043A\u0443\u0449\u0435\u0439 \u0448\u0438\u0440\u0438\u043D\u0435"
     );
     parts.push(`\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${textNodes.length} \u0441\u043B\u043E\u0451\u0432`);
     parts.push(`\u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E ${changed}`);

@@ -4,7 +4,7 @@
   "main": "dist/code.js",
   "editorType": ["figma", "figjam"],
   "menu": [
-    { "name": "Применить переносы с дефисом (RU)", "command": "apply-visible" },
+    { "name": "Применить переносы с дефисом (RU) по ширине", "command": "apply-visible" },
     { "name": "Применить мягкие переносы (RU)", "command": "apply-soft" },
     { "name": "Удалить переносы (плагина)", "command": "remove" }
   ]
