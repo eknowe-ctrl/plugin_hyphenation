@@ -194,7 +194,11 @@
     const clean = text.replace(/\u00AD/g, "");
     return clean.replace(/[А-Яа-яЁё]{5,}/g, (m) => hyphenateWord(m));
   }
+  function removeSoftHyphens(text) {
+    return text.replace(/\u00AD/g, "");
+  }
   async function main() {
+    const mode = figma.command === "remove" ? "remove" : "apply";
     const selection = figma.currentPage.selection;
     const textNodes = collectTextNodes(selection);
     if (textNodes.length === 0) {
@@ -207,7 +211,7 @@
     for (const node of textNodes) {
       try {
         await loadAllFonts(node);
-        const next = hyphenateText(node.characters);
+        const next = mode === "remove" ? removeSoftHyphens(node.characters) : hyphenateText(node.characters);
         if (next !== node.characters) {
           node.characters = next;
           changed += 1;
@@ -217,7 +221,10 @@
       }
     }
     const parts = [];
-    parts.push(`\u0413\u043E\u0442\u043E\u0432\u043E: \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${textNodes.length} \u0441\u043B\u043E\u0451\u0432`);
+    parts.push(
+      mode === "remove" ? "\u0413\u043E\u0442\u043E\u0432\u043E: \u0443\u0434\u0430\u043B\u0435\u043D\u044B \u043C\u044F\u0433\u043A\u0438\u0435 \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B" : "\u0413\u043E\u0442\u043E\u0432\u043E: \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B (RU)"
+    );
+    parts.push(`\u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${textNodes.length} \u0441\u043B\u043E\u0451\u0432`);
     parts.push(`\u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E ${changed}`);
     if (failed > 0) parts.push(`\u043E\u0448\u0438\u0431\u043E\u043A ${failed}`);
     figma.notify(parts.join(", "));

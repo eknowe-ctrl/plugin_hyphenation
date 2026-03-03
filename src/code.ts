@@ -56,7 +56,12 @@ function hyphenateText(text: string): string {
   return clean.replace(/[А-Яа-яЁё]{5,}/g, (m: string) => hyphenateWord(m));
 }
 
+function removeSoftHyphens(text: string): string {
+  return text.replace(/\u00AD/g, "");
+}
+
 async function main() {
+  const mode: "apply" | "remove" = figma.command === "remove" ? "remove" : "apply";
   const selection = figma.currentPage.selection;
   const textNodes = collectTextNodes(selection);
 
@@ -72,7 +77,10 @@ async function main() {
   for (const node of textNodes) {
     try {
       await loadAllFonts(node);
-      const next = hyphenateText(node.characters);
+      const next =
+        mode === "remove"
+          ? removeSoftHyphens(node.characters)
+          : hyphenateText(node.characters);
       if (next !== node.characters) {
         node.characters = next;
         changed += 1;
@@ -83,7 +91,10 @@ async function main() {
   }
 
   const parts: string[] = [];
-  parts.push(`Готово: обработано ${textNodes.length} слоёв`);
+  parts.push(
+    mode === "remove" ? "Готово: удалены мягкие переносы" : "Готово: применены переносы (RU)"
+  );
+  parts.push(`обработано ${textNodes.length} слоёв`);
   parts.push(`изменено ${changed}`);
   if (failed > 0) parts.push(`ошибок ${failed}`);
 

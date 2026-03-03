@@ -2,6 +2,10 @@
   "name": "RU Hyphenation (Soft Hyphens)",
   "api": "1.0.0",
   "main": "dist/code.js",
-  "editorType": ["figma", "figjam"]
+  "editorType": ["figma", "figjam"],
+  "menu": [
+    { "name": "Применить переносы (RU)", "command": "apply" },
+    { "name": "Удалить мягкие переносы", "command": "remove" }
+  ]
 }
 
