@@ -2,6 +2,9 @@ import Hypher from "hypher";
 import ruPatterns from "hyphenation.ru";
 
 const SOFT_HYPHEN = "\u00AD";
+const WORD_JOINER = "\u2060";
+const ZERO_WIDTH_SPACE = "\u200B";
+const VISIBLE_HYPHENATION = `${WORD_JOINER}-${ZERO_WIDTH_SPACE}`; // prevents hyphen moving to next line
 const hypher = new Hypher(ruPatterns as any);
 
 function collectTextNodes(nodes: readonly SceneNode[]): TextNode[] {
@@ -38,32 +41,52 @@ function shouldHyphenateWord(word: string): boolean {
   return word.length >= 5 && /[А-Яа-яЁё]/.test(word);
 }
 
-function hyphenateWord(word: string): string {
-  const clean = word.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
+type ApplyMode = "apply-visible" | "apply-soft";
+
+function stripAllHyphenationMarks(text: string): string {
+  // Clean up current + legacy variants.
+  return text
+    .replace(/\u00AD/g, "")
+    .replace(/\u2060-\u200B/g, "")
+    .replace(/-\u200B/g, "");
+}
+
+function hyphenateWord(word: string, mode: ApplyMode): string {
+  const clean = stripAllHyphenationMarks(word);
   if (!shouldHyphenateWord(clean)) return clean;
 
   const parts = hypher.hyphenate(clean);
   if (!parts || parts.length <= 1) return clean;
 
-  // Soft hyphen shows a hyphen ONLY when the word is actually broken at line end.
-  return parts.join(SOFT_HYPHEN);
+  if (mode === "apply-soft") {
+    // Correct typography: hyphen appears only at actual line breaks.
+    return parts.join(SOFT_HYPHEN);
+  }
+
+  // Visible workaround for Figma: insert a real hyphen but make it impossible to break BEFORE it.
+  // Break can happen AFTER it (via ZWSP), so the hyphen stays at line end and won't move to next line.
+  return parts.join(VISIBLE_HYPHENATION);
 }
 
-function hyphenateText(text: string): string {
+function hyphenateText(text: string, mode: ApplyMode): string {
   // Remove any previously inserted marks first to avoid duplicates.
-  const clean = text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
+  const clean = stripAllHyphenationMarks(text);
 
   // Hyphenate sequences of Cyrillic letters. Words with '-' will be handled as separate parts.
-  return clean.replace(/[А-Яа-яЁё]{5,}/g, (m: string) => hyphenateWord(m));
+  return clean.replace(/[А-Яа-яЁё]{5,}/g, (m: string) => hyphenateWord(m, mode));
 }
 
 function removeHyphenationMarks(text: string): string {
-  // Remove both: soft hyphens and the legacy visible hyphen+marker used by a previous version.
-  return text.replace(/-\u200B/g, "").replace(/\u00AD/g, "");
+  return stripAllHyphenationMarks(text);
 }
 
 async function main() {
-  const mode: "apply" | "remove" = figma.command === "remove" ? "remove" : "apply";
+  const mode: "remove" | ApplyMode =
+    figma.command === "remove"
+      ? "remove"
+      : figma.command === "apply-soft"
+        ? "apply-soft"
+        : "apply-visible";
   const selection = figma.currentPage.selection;
   const textNodes = collectTextNodes(selection);
 
@@ -82,7 +105,7 @@ async function main() {
       const next =
         mode === "remove"
           ? removeHyphenationMarks(node.characters)
-          : hyphenateText(node.characters);
+          : hyphenateText(node.characters, mode);
       if (next !== node.characters) {
         node.characters = next;
         changed += 1;
@@ -94,7 +117,11 @@ async function main() {
 
   const parts: string[] = [];
   parts.push(
-    mode === "remove" ? "Готово: удалены переносы (плагина)" : "Готово: применены переносы (RU)"
+    mode === "remove"
+      ? "Готово: удалены переносы (плагина)"
+      : mode === "apply-soft"
+        ? "Готово: применены мягкие переносы (RU)"
+        : "Готово: применены переносы с дефисом (RU)"
   );
   parts.push(`обработано ${textNodes.length} слоёв`);
   parts.push(`изменено ${changed}`);
