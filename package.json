@@ -1,0 +1,27 @@
+{
+  "name": "plugin_hyphenation",
+  "version": "1.0.0",
+  "description": "Figma plugin with TeX-based Russian hyphenation",
+  "main": "code.js",
+  "dependencies": {
+    "hyphenation.ru": "^0.2.1",
+    "hypher": "^0.2.5"
+  },
+  "scripts": {
+    "build": "esbuild src/code.js --bundle --platform=browser --format=iife --target=es2018 --outfile=code.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eknowe-ctrl/plugin_hyphenation.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/eknowe-ctrl/plugin_hyphenation/issues"
+  },
+  "homepage": "https://github.com/eknowe-ctrl/plugin_hyphenation#readme",
+  "devDependencies": {
+    "esbuild": "^0.27.3"
+  }
+}
