@@ -1,0 +1,7 @@
+{
+  "name": "Russian Hyphenation",
+  "id": "russian-hyphenation-simple",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "code.js"
+}
