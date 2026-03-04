@@ -132,28 +132,153 @@
   // src/code.js
   var Hypher = require_hypher();
   var russianPatterns = require_ru();
-  var SOFT_HYPHEN = "\xAD";
+  var ZERO_WIDTH_SPACE = "\u200B";
+  var INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
   var hypher = new Hypher(russianPatterns);
-  var RUSSIAN_WORD_REGEX = /[А-ЯЁа-яё]+(?:-[А-ЯЁа-яё]+)*/g;
-  function hyphenateRussianSegment(segment) {
-    if (segment.length < 4) {
-      return segment;
+  var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
+  var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
+  var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
+  var WIDTH_EPSILON = 0.01;
+  function normalizeTextForRehyphenation(text) {
+    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
+  }
+  function fitsWithinWidth(text, maxWidth, measureWidth) {
+    return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
+  }
+  function findBestBreakInToken(token, remainingWidth, measureWidth) {
+    const match = token.match(RUSSIAN_TOKEN_REGEX);
+    if (!match) {
+      return null;
     }
-    const parts = hypher.hyphenate(segment);
+    const leading = match[1];
+    const core = match[2];
+    const trailing = match[3];
+    if (core.length < 4 || core.includes("-")) {
+      return null;
+    }
+    const parts = hypher.hyphenate(core);
     if (!parts || parts.length <= 1) {
-      return segment;
+      return null;
     }
-    return parts.join(SOFT_HYPHEN);
+    for (let i = parts.length - 1; i >= 1; i -= 1) {
+      const leftCore = parts.slice(0, i).join("");
+      const rightCore = parts.slice(i).join("");
+      const leftWithDash = `${leading}${leftCore}-`;
+      if (fitsWithinWidth(leftWithDash, remainingWidth, measureWidth)) {
+        return {
+          left: `${leading}${leftCore}`,
+          right: `${rightCore}${trailing}`
+        };
+      }
+    }
+    return null;
   }
-  function hyphenateRussianWord(word) {
-    return word.split("-").map((part) => hyphenateRussianSegment(part)).join("-");
+  function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
+    const normalized = normalizeTextForRehyphenation(text);
+    const tokens = normalized.match(TOKEN_REGEX);
+    if (!tokens) {
+      return normalized;
+    }
+    let result = "";
+    let currentLine = "";
+    let pendingSpaces = "";
+    for (const token of tokens) {
+      if (token === "\n") {
+        result += `${pendingSpaces}
+`;
+        currentLine = "";
+        pendingSpaces = "";
+        continue;
+      }
+      if (SPACE_TOKEN_REGEX.test(token)) {
+        pendingSpaces += token;
+        continue;
+      }
+      result += pendingSpaces;
+      let chunk = token;
+      let linePrefix = `${currentLine}${pendingSpaces}`;
+      while (chunk.length > 0) {
+        if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
+          result += chunk;
+          currentLine = `${linePrefix}${chunk}`;
+          chunk = "";
+          break;
+        }
+        if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
+          result += chunk;
+          currentLine = chunk;
+          chunk = "";
+          break;
+        }
+        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+        const breakPoint = findBestBreakInToken(
+          chunk,
+          remainingWidth,
+          measureWidth
+        );
+        if (breakPoint) {
+          result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
+          chunk = breakPoint.right;
+          currentLine = "";
+          linePrefix = "";
+          continue;
+        }
+        if (linePrefix.length > 0) {
+          linePrefix = "";
+          continue;
+        }
+        result += chunk;
+        currentLine = chunk;
+        chunk = "";
+      }
+      pendingSpaces = "";
+    }
+    result += pendingSpaces;
+    return result;
   }
-  function hyphenateRussianText(text) {
-    const normalized = text.replace(/\u00AD/g, "");
-    return normalized.replace(
-      RUSSIAN_WORD_REGEX,
-      (word) => hyphenateRussianWord(word)
-    );
+  function hasMixedTypography(node) {
+    const props = [
+      node.fontName,
+      node.fontSize,
+      node.lineHeight,
+      node.letterSpacing,
+      node.textCase,
+      node.textDecoration
+    ];
+    return props.some((value) => value === figma.mixed);
+  }
+  function createWidthMeasurer(node) {
+    const probe = figma.createText();
+    probe.visible = false;
+    probe.x = -1e5;
+    probe.y = -1e5;
+    probe.textAutoResize = "WIDTH_AND_HEIGHT";
+    probe.fontName = node.fontName;
+    probe.fontSize = node.fontSize;
+    probe.lineHeight = node.lineHeight;
+    probe.letterSpacing = node.letterSpacing;
+    probe.textCase = node.textCase;
+    probe.textDecoration = node.textDecoration;
+    const cache = /* @__PURE__ */ new Map();
+    const measure = (text) => {
+      if (!text || text.length === 0) {
+        return 0;
+      }
+      const cached = cache.get(text);
+      if (cached !== void 0) {
+        return cached;
+      }
+      probe.characters = text;
+      const width = probe.width;
+      cache.set(text, width);
+      return width;
+    };
+    return {
+      measure,
+      destroy() {
+        probe.remove();
+      }
+    };
   }
   function collectTextNodes(nodes) {
     const textNodes = [];
@@ -206,11 +331,27 @@
     }
     let changedNodes = 0;
     let skippedNodes = 0;
+    let skippedMixedTypography = 0;
     for (const node of textNodes) {
       try {
         await loadFontsForNode(node);
+        if (hasMixedTypography(node)) {
+          skippedNodes += 1;
+          skippedMixedTypography += 1;
+          continue;
+        }
         const original = node.characters;
-        const hyphenated = hyphenateRussianText(original);
+        const measurer = createWidthMeasurer(node);
+        let hyphenated = original;
+        try {
+          hyphenated = hyphenateRussianTextWithVisibleDash(
+            original,
+            node.width,
+            measurer.measure
+          );
+        } finally {
+          measurer.destroy();
+        }
         if (hyphenated !== original) {
           node.characters = hyphenated;
           changedNodes += 1;
@@ -223,7 +364,13 @@
     if (changedNodes === 0) {
       figma.notify("\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0443\u0436\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u043B\u0438 \u0440\u0443\u0441\u0441\u043A\u0438\u0445 \u0441\u043B\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.");
     } else {
-      const skippedMessage = skippedNodes > 0 ? `, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${skippedNodes}` : "";
+      let skippedMessage = "";
+      if (skippedNodes > 0) {
+        skippedMessage = `, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${skippedNodes}`;
+        if (skippedMixedTypography > 0) {
+          skippedMessage += ` (\u0441\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography})`;
+        }
+      }
       figma.notify(`\u0413\u043E\u0442\u043E\u0432\u043E: \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${changedNodes} \u0441\u043B\u043E\u0451\u0432${skippedMessage}.`);
     }
     figma.closePlugin();
