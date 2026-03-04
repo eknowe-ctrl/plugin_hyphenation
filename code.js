@@ -464,9 +464,9 @@
   }
   function run() {
     figma.showUI(__html__, {
-      width: 360,
-      height: 230,
-      themeColors: true
+      width: 300,
+      height: 408,
+      themeColors: false
     });
     postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
     figma.ui.onmessage = async (message) => {

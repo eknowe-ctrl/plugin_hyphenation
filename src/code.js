@@ -394,9 +394,9 @@ async function handleAction(mode) {
 
 function run() {
   figma.showUI(__html__, {
-    width: 360,
-    height: 230,
-    themeColors: true
+    width: 300,
+    height: 408,
+    themeColors: false
   });
 
   postUiStatus("Выделите текст и выберите действие.", "info");

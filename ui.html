@@ -5,138 +5,167 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Russian Hyphenation</title>
     <style>
-      :root {
-        color-scheme: light;
-        --bg: #ffffff;
-        --text: #111111;
-        --muted: #6d6d6d;
-        --line: #dcdcdc;
-        --primary: #111111;
-        --primary-text: #ffffff;
-      }
-
       * {
         box-sizing: border-box;
       }
 
+      :root {
+        color-scheme: light;
+      }
+
+      html,
       body {
         margin: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: var(--bg);
-        color: var(--text);
       }
 
       .panel {
+        position: relative;
         width: 100%;
-        height: 100vh;
-        padding: 18px 16px 16px;
+        height: 100%;
+        padding: 14px 0 18px;
         display: flex;
         flex-direction: column;
-      }
-
-      .top {
-        display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 14px;
-      }
-
-      .title {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 600;
-        line-height: 1.3;
+        background: #ececec;
+        border-radius: 16px;
+        overflow: hidden;
       }
 
       .close {
-        width: 24px;
-        height: 24px;
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 36px;
+        height: 36px;
         border: none;
-        border-radius: 999px;
         background: transparent;
-        color: var(--muted);
-        font-size: 16px;
+        color: #7f7f7f;
+        font-size: 22px;
+        font-weight: 300;
         line-height: 1;
         cursor: pointer;
       }
 
       .close:hover {
-        background: #f0f0f0;
+        color: #5f5f5f;
       }
 
-      .description {
-        margin: 0 0 14px;
+      .illustration {
+        margin-top: 28px;
+        width: 220px;
+        height: 130px;
+      }
+
+      .note {
+        margin: 22px 0 0;
+        width: 220px;
+        text-align: center;
+        color: #6d6d6d;
         font-size: 12px;
-        line-height: 1.4;
-        color: var(--muted);
+        line-height: 1.35;
+        letter-spacing: 0.2px;
+        white-space: pre-line;
       }
 
-      .buttons {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .btn {
-        width: 100%;
-        height: 40px;
-        border-radius: 8px;
-        border: 1px solid transparent;
-        font-size: 13px;
-        font-weight: 600;
+      .primary {
+        margin-top: 4px;
+        width: 232px;
+        height: 50px;
+        border: none;
+        border-radius: 5px;
+        background: #2f2f31;
+        color: #f2f2f2;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0.4px;
         cursor: pointer;
       }
 
-      .btn:disabled {
+      .primary:disabled {
         cursor: default;
-        opacity: 0.6;
+        opacity: 0.65;
       }
 
-      .btn-primary {
-        background: var(--primary);
-        color: var(--primary-text);
+      .reset {
+        margin-top: 3px;
+        border: none;
+        background: transparent;
+        color: #2499ed;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0.2px;
+        cursor: pointer;
       }
 
-      .btn-secondary {
-        background: #fff;
-        color: var(--text);
-        border-color: var(--line);
+      .reset:disabled {
+        cursor: default;
+        opacity: 0.65;
       }
 
-      .status {
+      .author {
         margin-top: auto;
-        min-height: 18px;
-        font-size: 11px;
-        line-height: 1.4;
-        color: var(--muted);
+        margin-bottom: 2px;
+        color: #b0b0b0;
+        font-size: 14px;
+        letter-spacing: 0.2px;
       }
 
-      .status.success {
-        color: #1f7a39;
-      }
-
-      .status.error {
-        color: #bb2e2e;
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
       }
     </style>
   </head>
   <body>
     <main class="panel">
-      <header class="top">
-        <h1 class="title">Переносы в русском тексте</h1>
-        <button class="close" id="close-button" aria-label="Закрыть плагин">✕</button>
-      </header>
+      <button class="close" id="close-button" aria-label="Закрыть плагин">✕</button>
 
-      <p class="description">
-        Для работы выделите текстовый блок в Figma, затем нажмите нужную кнопку.
-      </p>
+      <svg
+        class="illustration"
+        viewBox="0 0 220 130"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <rect x="16" y="8" width="188" height="84" rx="4" fill="#E2E8EB" />
+        <rect x="16" y="34" width="188" height="9" fill="#D4DEE3" />
+        <rect x="46" y="49" width="158" height="9" fill="#D4DEE3" />
+        <rect x="46" y="64" width="158" height="9" fill="#D4DEE3" />
+        <rect x="46" y="79" width="158" height="9" fill="#D4DEE3" />
+        <path d="M46 31H205" stroke="#38A0E0" stroke-width="3" />
+        <path d="M46 31V59" stroke="#38A0E0" stroke-width="3" />
+        <rect x="39" y="23" width="14" height="14" fill="#ECECEC" stroke="#38A0E0" stroke-width="3" />
+        <g transform="translate(0 0)">
+          <path
+            d="M31 87L55 102C57 103 60 102 61 99L83 58C84 55 81 52 78 53L26 73C22 74 21 80 24 82L31 87Z"
+            fill="#38A0E0"
+          />
+          <path
+            d="M31 87L52 74"
+            stroke="#ECECEC"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </g>
+      </svg>
 
-      <section class="buttons">
-        <button class="btn btn-primary" id="apply-button">Добавить переносы</button>
-        <button class="btn btn-secondary" id="reset-button">Сбросить</button>
-      </section>
+      <p class="note">Для работы выделите текстовый
+блок в Figma, затем нажмите
+нужную кнопку.</p>
 
-      <div class="status" id="status"></div>
+      <button class="primary" id="apply-button">Применить переносы</button>
+      <button class="reset" id="reset-button">Сбросить</button>
+      <div class="author">by Eugeny Leshchenko</div>
+      <div class="sr-only" id="status" aria-live="polite"></div>
     </main>
 
     <script>
@@ -156,10 +185,7 @@
 
       function updateStatus(message, kind) {
         statusNode.textContent = message || "";
-        statusNode.className = "status";
-        if (kind === "success" || kind === "error") {
-          statusNode.classList.add(kind);
-        }
+        statusNode.setAttribute("data-kind", kind || "");
       }
 
       applyButton.addEventListener("click", () => send("apply"));
