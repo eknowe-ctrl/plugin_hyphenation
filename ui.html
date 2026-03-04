@@ -9,27 +9,31 @@
         box-sizing: border-box;
       }
 
-      :root {
-        color-scheme: light;
-      }
-
       html,
       body {
         margin: 0;
         width: 100%;
         height: 100%;
-        background: transparent;
-        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #ffffff;
+        font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Inter, sans-serif;
       }
 
       .panel {
         position: relative;
         width: 100%;
         height: 100%;
-        background: #ececec;
+        padding: 18px 12px;
+        background: #ffffff;
+        overflow: hidden;
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 29px;
       }
 
-      .close-hitbox {
+      .close {
         position: absolute;
         top: 8px;
         right: 8px;
@@ -37,46 +41,144 @@
         height: 24px;
         border: none;
         background: transparent;
-        opacity: 0;
+        color: #a6a6a6;
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 1;
+        padding: 0;
         cursor: pointer;
       }
 
-      .illustration {
+      .close:hover {
+        color: #8a8a8a;
+      }
+
+      .hero {
         position: absolute;
-        left: 40px;
+        width: 218.4px;
+        height: 193.8px;
+        left: 40.8px;
         top: 40px;
-        width: 224px;
-        height: 132px;
+        background: #f4f9f9;
+        border-radius: 4.8px;
+        overflow: hidden;
+      }
+
+      .hero-inner {
+        position: absolute;
+        width: 218.4px;
+        height: 193.8px;
+        left: 0;
+        top: 0;
+        background: #f4f9f9;
+        border-radius: 4.8px;
+        overflow: hidden;
+      }
+
+      .shape-frame {
+        position: absolute;
+        width: 233.07px;
+        height: 233.07px;
+        left: 30px;
+        top: 30px;
+        border: 2.4px #2d9cdb solid;
+      }
+
+      .shape-square {
+        position: absolute;
+        width: 16.18px;
+        height: 16.18px;
+        left: 22.97px;
+        top: 23.34px;
+        background: #f4f9f9;
+        border: 2.4px #2d9cdb solid;
+      }
+
+      .shape-line {
+        position: absolute;
+        width: 198.24px;
+        height: 15.35px;
+        left: 47.41px;
+        background: #dce8e8;
+      }
+
+      .shape-line-1 {
+        top: 48.99px;
+      }
+
+      .shape-line-2 {
+        top: 73.68px;
+      }
+
+      .shape-line-3 {
+        top: 98.38px;
+      }
+
+      .shape-line-4 {
+        top: 123.08px;
+      }
+
+      .shape-line-5 {
+        top: 147.77px;
+      }
+
+      .shape-line-6 {
+        top: 172.47px;
+      }
+
+      .shape-fade {
+        position: absolute;
+        width: 218.4px;
+        height: 193.8px;
+        left: 0;
+        top: 0;
+        background: linear-gradient(180deg, rgba(244, 249, 249, 0) 37%, #ffffff 74%);
+      }
+
+      .shape-cursor {
+        position: absolute;
+        width: 51.03px;
+        height: 57.1px;
+        left: 52.21px;
+        top: 43.09px;
+        transform: rotate(45deg);
+        transform-origin: top left;
+        background: #2d9cdb;
+        border-radius: 9.12px;
+        outline: 4.56px #f4f9f9 solid;
       }
 
       .note {
         position: absolute;
-        left: 53px;
-        top: 220px;
-        width: 194px;
-        margin: 0;
+        width: 186.64px;
+        height: 39.79px;
+        left: 15.88px;
+        top: 148.71px;
+        opacity: 0.8;
         text-align: center;
-        color: #6f6f6f;
-        font-size: 12px;
-        line-height: 1.26;
-        letter-spacing: 0.1px;
-        white-space: pre-line;
+        color: #333333;
+        font-size: 11px;
+        font-weight: 400;
+        line-height: 13.2px;
+        letter-spacing: 0;
       }
 
       .primary {
-        position: absolute;
-        left: 34px;
-        top: 294px;
-        width: 232px;
-        height: 50px;
+        padding: 17.4px 33.6px;
+        background: #333333;
+        overflow: hidden;
+        border-radius: 4.8px;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        display: inline-flex;
         border: none;
-        border-radius: 5px;
-        background: #2f3134;
-        color: #ececec;
-        font-size: 16px;
+        color: #ffffff;
+        font-size: 14.4px;
         font-weight: 400;
-        line-height: 1;
-        letter-spacing: 0.2px;
+        letter-spacing: 0.58px;
+        line-height: 14.4px;
+        white-space: nowrap;
         cursor: pointer;
       }
 
@@ -86,17 +188,14 @@
       }
 
       .reset {
-        position: absolute;
-        top: 371px;
-        left: 0;
-        width: 100%;
+        padding: 0;
         border: none;
         background: transparent;
-        color: #2499ed;
-        font-size: 16px;
+        color: #2d9cdb;
+        font-size: 14.4px;
         font-weight: 400;
-        line-height: 1;
-        letter-spacing: 0.1px;
+        letter-spacing: 0.58px;
+        line-height: 14.4px;
         text-align: center;
         cursor: pointer;
       }
@@ -107,15 +206,12 @@
       }
 
       .author {
-        position: absolute;
-        left: 0;
-        bottom: 14px;
-        width: 100%;
         text-align: center;
-        color: #b6b6b6;
-        font-size: 14px;
-        font-weight: 300;
-        letter-spacing: 0.1px;
+        color: #bdbdbd;
+        font-size: 11px;
+        font-weight: 400;
+        letter-spacing: 0.44px;
+        line-height: 11px;
       }
 
       .sr-only {
@@ -131,40 +227,23 @@
   </head>
   <body>
     <main class="panel">
-      <button class="close-hitbox" id="close-button" aria-label="Закрыть плагин"></button>
+      <button class="close" id="close-button" aria-label="Закрыть плагин">×</button>
 
-      <svg
-        class="illustration"
-        viewBox="0 0 220 130"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <rect x="16" y="8" width="188" height="84" rx="4" fill="#E2E8EB" />
-        <rect x="16" y="34" width="188" height="9" fill="#D4DEE3" />
-        <rect x="46" y="49" width="158" height="9" fill="#D4DEE3" />
-        <rect x="46" y="64" width="158" height="9" fill="#D4DEE3" />
-        <rect x="46" y="79" width="158" height="9" fill="#D4DEE3" />
-        <path d="M46 31H205" stroke="#38A0E0" stroke-width="3" />
-        <path d="M46 31V59" stroke="#38A0E0" stroke-width="3" />
-        <rect x="39" y="23" width="14" height="14" fill="#ECECEC" stroke="#38A0E0" stroke-width="3" />
-        <g transform="translate(0 0)">
-          <path
-            d="M31 87L55 102C57 103 60 102 61 99L83 58C84 55 81 52 78 53L26 73C22 74 21 80 24 82L31 87Z"
-            fill="#38A0E0"
-          />
-          <path
-            d="M31 87L52 74"
-            stroke="#ECECEC"
-            stroke-width="2"
-            stroke-linecap="round"
-          />
-        </g>
-      </svg>
-
-      <p class="note">Для работы выделите текстовый
-блок в Figma, затем нажмите
-нужную кнопку.</p>
+      <div class="hero" aria-hidden="true">
+        <div class="hero-inner">
+          <div class="shape-frame"></div>
+          <div class="shape-square"></div>
+          <div class="shape-line shape-line-1"></div>
+          <div class="shape-line shape-line-2"></div>
+          <div class="shape-line shape-line-3"></div>
+          <div class="shape-line shape-line-4"></div>
+          <div class="shape-line shape-line-5"></div>
+          <div class="shape-line shape-line-6"></div>
+          <div class="shape-fade"></div>
+          <div class="shape-cursor"></div>
+        </div>
+        <div class="note">Для работы выделите текстовый блок в Figma, затем нажмите нужную кнопку.</div>
+      </div>
 
       <button class="primary" id="apply-button">Применить переносы</button>
       <button class="reset" id="reset-button">Сбросить</button>
