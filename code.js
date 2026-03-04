@@ -142,6 +142,9 @@
   function normalizeTextForRehyphenation(text) {
     return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
   }
+  function resetHyphenationText(text) {
+    return normalizeTextForRehyphenation(text);
+  }
   function fitsWithinWidth(text, maxWidth, measureWidth) {
     return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
   }
@@ -325,6 +328,7 @@
     }
   }
   async function run() {
+    const isResetMode = figma.command === "reset";
     const selection = figma.currentPage.selection;
     if (selection.length === 0) {
       figma.notify("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0439 \u0441\u043B\u043E\u0439 \u0438\u043B\u0438 \u0433\u0440\u0443\u043F\u043F\u0443 \u0441 \u0442\u0435\u043A\u0441\u0442\u043E\u043C.");
@@ -343,25 +347,29 @@
     for (const node of textNodes) {
       try {
         await loadFontsForNode(node);
-        if (hasMixedTypography(node)) {
-          skippedNodes += 1;
-          skippedMixedTypography += 1;
-          continue;
-        }
         const original = node.characters;
-        const measurer = createWidthMeasurer(node);
-        let hyphenated = original;
-        try {
-          hyphenated = hyphenateRussianTextWithVisibleDash(
-            original,
-            node.width,
-            measurer.measure
-          );
-        } finally {
-          measurer.destroy();
+        let transformed = original;
+        if (isResetMode) {
+          transformed = resetHyphenationText(original);
+        } else {
+          if (hasMixedTypography(node)) {
+            skippedNodes += 1;
+            skippedMixedTypography += 1;
+            continue;
+          }
+          const measurer = createWidthMeasurer(node);
+          try {
+            transformed = hyphenateRussianTextWithVisibleDash(
+              original,
+              node.width,
+              measurer.measure
+            );
+          } finally {
+            measurer.destroy();
+          }
         }
-        if (hyphenated !== original) {
-          node.characters = hyphenated;
+        if (transformed !== original) {
+          node.characters = transformed;
           changedNodes += 1;
         }
       } catch (error) {
@@ -369,25 +377,38 @@
         console.error(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u0441\u043B\u043E\u0439 ${node.name}`, error);
       }
     }
-    if (changedNodes === 0) {
-      if (skippedNodes > 0) {
-        let skippedMessage = `\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0441\u043B\u043E\u0451\u0432: ${skippedNodes}.`;
-        if (skippedMixedTypography > 0) {
-          skippedMessage += ` \u0421\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography}.`;
+    if (isResetMode) {
+      if (changedNodes === 0) {
+        if (skippedNodes > 0) {
+          figma.notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0441\u0431\u0440\u043E\u0441. \u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0441\u043B\u043E\u0451\u0432: ${skippedNodes}.`);
+        } else {
+          figma.notify("\u0421\u0431\u0440\u0430\u0441\u044B\u0432\u0430\u0442\u044C \u043D\u0435\u0447\u0435\u0433\u043E: \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B.");
         }
-        figma.notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B. ${skippedMessage}`);
       } else {
-        figma.notify("\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0443\u0436\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u043B\u0438 \u0440\u0443\u0441\u0441\u043A\u0438\u0445 \u0441\u043B\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.");
+        const skippedMessage = skippedNodes > 0 ? `, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${skippedNodes}` : "";
+        figma.notify(`\u0413\u043E\u0442\u043E\u0432\u043E: \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0432 ${changedNodes} \u0441\u043B\u043E\u0451\u0432${skippedMessage}.`);
       }
     } else {
-      let skippedMessage = "";
-      if (skippedNodes > 0) {
-        skippedMessage = `, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${skippedNodes}`;
-        if (skippedMixedTypography > 0) {
-          skippedMessage += ` (\u0441\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography})`;
+      if (changedNodes === 0) {
+        if (skippedNodes > 0) {
+          let skippedMessage = `\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0441\u043B\u043E\u0451\u0432: ${skippedNodes}.`;
+          if (skippedMixedTypography > 0) {
+            skippedMessage += ` \u0421\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography}.`;
+          }
+          figma.notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B. ${skippedMessage}`);
+        } else {
+          figma.notify("\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0443\u0436\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u043B\u0438 \u0440\u0443\u0441\u0441\u043A\u0438\u0445 \u0441\u043B\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.");
         }
+      } else {
+        let skippedMessage = "";
+        if (skippedNodes > 0) {
+          skippedMessage = `, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${skippedNodes}`;
+          if (skippedMixedTypography > 0) {
+            skippedMessage += ` (\u0441\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography})`;
+          }
+        }
+        figma.notify(`\u0413\u043E\u0442\u043E\u0432\u043E: \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${changedNodes} \u0441\u043B\u043E\u0451\u0432${skippedMessage}.`);
       }
-      figma.notify(`\u0413\u043E\u0442\u043E\u0432\u043E: \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u043D\u043E ${changedNodes} \u0441\u043B\u043E\u0451\u0432${skippedMessage}.`);
     }
     figma.closePlugin();
   }

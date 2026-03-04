@@ -13,6 +13,10 @@ function normalizeTextForRehyphenation(text) {
   return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
 }
 
+function resetHyphenationText(text) {
+  return normalizeTextForRehyphenation(text);
+}
+
 function fitsWithinWidth(text, maxWidth, measureWidth) {
   return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
 }
@@ -234,6 +238,7 @@ async function loadFontsForNode(node) {
 }
 
 async function run() {
+  const isResetMode = figma.command === "reset";
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {
     figma.notify("Выделите текстовый слой или группу с текстом.");
@@ -256,28 +261,32 @@ async function run() {
     try {
       await loadFontsForNode(node);
 
-      if (hasMixedTypography(node)) {
-        skippedNodes += 1;
-        skippedMixedTypography += 1;
-        continue;
-      }
-
       const original = node.characters;
-      const measurer = createWidthMeasurer(node);
-      let hyphenated = original;
+      let transformed = original;
 
-      try {
-        hyphenated = hyphenateRussianTextWithVisibleDash(
-          original,
-          node.width,
-          measurer.measure
-        );
-      } finally {
-        measurer.destroy();
+      if (isResetMode) {
+        transformed = resetHyphenationText(original);
+      } else {
+        if (hasMixedTypography(node)) {
+          skippedNodes += 1;
+          skippedMixedTypography += 1;
+          continue;
+        }
+
+        const measurer = createWidthMeasurer(node);
+        try {
+          transformed = hyphenateRussianTextWithVisibleDash(
+            original,
+            node.width,
+            measurer.measure
+          );
+        } finally {
+          measurer.destroy();
+        }
       }
 
-      if (hyphenated !== original) {
-        node.characters = hyphenated;
+      if (transformed !== original) {
+        node.characters = transformed;
         changedNodes += 1;
       }
     } catch (error) {
@@ -286,25 +295,39 @@ async function run() {
     }
   }
 
-  if (changedNodes === 0) {
-    if (skippedNodes > 0) {
-      let skippedMessage = `Пропущено слоёв: ${skippedNodes}.`;
-      if (skippedMixedTypography > 0) {
-        skippedMessage += ` Смешанная типографика: ${skippedMixedTypography}.`;
+  if (isResetMode) {
+    if (changedNodes === 0) {
+      if (skippedNodes > 0) {
+        figma.notify(`Не удалось выполнить сброс. Пропущено слоёв: ${skippedNodes}.`);
+      } else {
+        figma.notify("Сбрасывать нечего: переносы не найдены.");
       }
-      figma.notify(`Не удалось применить переносы. ${skippedMessage}`);
     } else {
-      figma.notify("Переносы уже применены или русских слов не найдено.");
+      const skippedMessage =
+        skippedNodes > 0 ? `, пропущено: ${skippedNodes}` : "";
+      figma.notify(`Готово: сброшены переносы в ${changedNodes} слоёв${skippedMessage}.`);
     }
   } else {
-    let skippedMessage = "";
-    if (skippedNodes > 0) {
-      skippedMessage = `, пропущено: ${skippedNodes}`;
-      if (skippedMixedTypography > 0) {
-        skippedMessage += ` (смешанная типографика: ${skippedMixedTypography})`;
+    if (changedNodes === 0) {
+      if (skippedNodes > 0) {
+        let skippedMessage = `Пропущено слоёв: ${skippedNodes}.`;
+        if (skippedMixedTypography > 0) {
+          skippedMessage += ` Смешанная типографика: ${skippedMixedTypography}.`;
+        }
+        figma.notify(`Не удалось применить переносы. ${skippedMessage}`);
+      } else {
+        figma.notify("Переносы уже применены или русских слов не найдено.");
       }
+    } else {
+      let skippedMessage = "";
+      if (skippedNodes > 0) {
+        skippedMessage = `, пропущено: ${skippedNodes}`;
+        if (skippedMixedTypography > 0) {
+          skippedMessage += ` (смешанная типографика: ${skippedMixedTypography})`;
+        }
+      }
+      figma.notify(`Готово: обработано ${changedNodes} слоёв${skippedMessage}.`);
     }
-    figma.notify(`Готово: обработано ${changedNodes} слоёв${skippedMessage}.`);
   }
 
   figma.closePlugin();

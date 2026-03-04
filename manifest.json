@@ -3,5 +3,15 @@
   "id": "russian-hyphenation-simple",
   "api": "1.0.0",
   "editorType": ["figma"],
-  "main": "code.js"
+  "main": "code.js",
+  "menu": [
+    {
+      "name": "Применить переносы",
+      "command": "apply"
+    },
+    {
+      "name": "Сбросить переносы",
+      "command": "reset"
+    }
+  ]
 }
