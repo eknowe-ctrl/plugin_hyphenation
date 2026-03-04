@@ -204,26 +204,34 @@
           chunk = "";
           break;
         }
+        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+        if (linePrefix.length > 0) {
+          const breakPoint2 = findBestBreakInToken(
+            chunk,
+            remainingWidth,
+            measureWidth
+          );
+          if (breakPoint2) {
+            result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
+            chunk = breakPoint2.right;
+            currentLine = "";
+            linePrefix = "";
+            continue;
+          }
+          linePrefix = "";
+          continue;
+        }
         if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
           result += chunk;
           currentLine = chunk;
           chunk = "";
           break;
         }
-        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
-        const breakPoint = findBestBreakInToken(
-          chunk,
-          remainingWidth,
-          measureWidth
-        );
+        const breakPoint = findBestBreakInToken(chunk, maxWidth, measureWidth);
         if (breakPoint) {
           result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
           chunk = breakPoint.right;
           currentLine = "";
-          linePrefix = "";
-          continue;
-        }
-        if (linePrefix.length > 0) {
           linePrefix = "";
           continue;
         }
@@ -362,7 +370,15 @@
       }
     }
     if (changedNodes === 0) {
-      figma.notify("\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0443\u0436\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u043B\u0438 \u0440\u0443\u0441\u0441\u043A\u0438\u0445 \u0441\u043B\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.");
+      if (skippedNodes > 0) {
+        let skippedMessage = `\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0441\u043B\u043E\u0451\u0432: ${skippedNodes}.`;
+        if (skippedMixedTypography > 0) {
+          skippedMessage += ` \u0421\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430: ${skippedMixedTypography}.`;
+        }
+        figma.notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B. ${skippedMessage}`);
+      } else {
+        figma.notify("\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0443\u0436\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u043B\u0438 \u0440\u0443\u0441\u0441\u043A\u0438\u0445 \u0441\u043B\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E.");
+      }
     } else {
       let skippedMessage = "";
       if (skippedNodes > 0) {

@@ -89,31 +89,39 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
         break;
       }
 
+      const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+      if (linePrefix.length > 0) {
+        const breakPoint = findBestBreakInToken(
+          chunk,
+          remainingWidth,
+          measureWidth
+        );
+
+        if (breakPoint) {
+          result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
+          chunk = breakPoint.right;
+          currentLine = "";
+          linePrefix = "";
+          continue;
+        }
+
+        // Если в текущей строке нет подходящей точки, переносим токен на новую строку.
+        linePrefix = "";
+        continue;
+      }
+
       if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
-        // Токен не помещается в текущую строку целиком и уходит на следующую.
         result += chunk;
         currentLine = chunk;
         chunk = "";
         break;
       }
 
-      const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
-      const breakPoint = findBestBreakInToken(
-        chunk,
-        remainingWidth,
-        measureWidth
-      );
-
+      const breakPoint = findBestBreakInToken(chunk, maxWidth, measureWidth);
       if (breakPoint) {
         result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
         chunk = breakPoint.right;
         currentLine = "";
-        linePrefix = "";
-        continue;
-      }
-
-      if (linePrefix.length > 0) {
-        // Если в текущей строке нет подходящей точки, переносим токен на новую строку.
         linePrefix = "";
         continue;
       }
@@ -279,7 +287,15 @@ async function run() {
   }
 
   if (changedNodes === 0) {
-    figma.notify("Переносы уже применены или русских слов не найдено.");
+    if (skippedNodes > 0) {
+      let skippedMessage = `Пропущено слоёв: ${skippedNodes}.`;
+      if (skippedMixedTypography > 0) {
+        skippedMessage += ` Смешанная типографика: ${skippedMixedTypography}.`;
+      }
+      figma.notify(`Не удалось применить переносы. ${skippedMessage}`);
+    } else {
+      figma.notify("Переносы уже применены или русских слов не найдено.");
+    }
   } else {
     let skippedMessage = "";
     if (skippedNodes > 0) {
