@@ -33,26 +33,6 @@
         gap: 29px;
       }
 
-      .close {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 24px;
-        height: 24px;
-        border: none;
-        background: transparent;
-        color: #a6a6a6;
-        font-size: 18px;
-        font-weight: 400;
-        line-height: 1;
-        padding: 0;
-        cursor: pointer;
-      }
-
-      .close:hover {
-        color: #8a8a8a;
-      }
-
       .hero {
         position: absolute;
         width: 218.4px;
@@ -227,8 +207,6 @@
   </head>
   <body>
     <main class="panel">
-      <button class="close" id="close-button" aria-label="Закрыть плагин">×</button>
-
       <div class="hero" aria-hidden="true">
         <div class="hero-inner">
           <div class="shape-frame"></div>
@@ -254,7 +232,6 @@
     <script>
       const applyButton = document.getElementById("apply-button");
       const resetButton = document.getElementById("reset-button");
-      const closeButton = document.getElementById("close-button");
       const statusNode = document.getElementById("status");
 
       function send(type) {
@@ -273,7 +250,6 @@
 
       applyButton.addEventListener("click", () => send("apply"));
       resetButton.addEventListener("click", () => send("reset"));
-      closeButton.addEventListener("click", () => send("close"));
 
       window.onmessage = (event) => {
         const message = event.data.pluginMessage;
