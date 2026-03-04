@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="218.4" height="193.8" viewBox="0 0 218.4 193.8" fill="none">
+  <defs>
+    <linearGradient id="fade" x1="109.2" y1="0" x2="109.2" y2="193.8" gradientUnits="userSpaceOnUse">
+      <stop offset="0.37" stop-color="#F4F9F9" stop-opacity="0"/>
+      <stop offset="0.74" stop-color="white"/>
+    </linearGradient>
+    <clipPath id="clip0">
+      <rect width="218.4" height="193.8" rx="4.8" fill="white"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip0)">
+    <rect width="218.4" height="193.8" rx="4.8" fill="#F4F9F9"/>
+    <rect x="30" y="30" width="233.07" height="233.07" stroke="#2D9CDB" stroke-width="2.4"/>
+    <rect x="22.97" y="23.34" width="16.18" height="16.18" fill="#F4F9F9" stroke="#2D9CDB" stroke-width="2.4"/>
+    <rect x="47.41" y="48.99" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="47.41" y="73.68" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="47.41" y="98.38" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="47.41" y="123.08" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="47.41" y="147.77" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="47.41" y="172.47" width="198.24" height="15.35" fill="#DCE8E8"/>
+    <rect x="8.44" y="55.65" width="67.26" height="66.99" fill="white"/>
+    <rect x="13" y="60.22" width="58.13" height="57.87" rx="9.12" fill="#2D9CDB"/>
+    <rect width="218.4" height="193.8" fill="url(#fade)"/>
+  </g>
+</svg>
