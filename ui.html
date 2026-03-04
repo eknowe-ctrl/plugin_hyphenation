@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Russian Hyphenation</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --text: #111111;
+        --muted: #6d6d6d;
+        --line: #dcdcdc;
+        --primary: #111111;
+        --primary-text: #ffffff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .panel {
+        width: 100%;
+        height: 100vh;
+        padding: 18px 16px 16px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      .close {
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .close:hover {
+        background: #f0f0f0;
+      }
+
+      .description {
+        margin: 0 0 14px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .btn {
+        width: 100%;
+        height: 40px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .btn:disabled {
+        cursor: default;
+        opacity: 0.6;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-text);
+      }
+
+      .btn-secondary {
+        background: #fff;
+        color: var(--text);
+        border-color: var(--line);
+      }
+
+      .status {
+        margin-top: auto;
+        min-height: 18px;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .status.success {
+        color: #1f7a39;
+      }
+
+      .status.error {
+        color: #bb2e2e;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <header class="top">
+        <h1 class="title">Переносы в русском тексте</h1>
+        <button class="close" id="close-button" aria-label="Закрыть плагин">✕</button>
+      </header>
+
+      <p class="description">
+        Для работы выделите текстовый блок в Figma, затем нажмите нужную кнопку.
+      </p>
+
+      <section class="buttons">
+        <button class="btn btn-primary" id="apply-button">Добавить переносы</button>
+        <button class="btn btn-secondary" id="reset-button">Сбросить</button>
+      </section>
+
+      <div class="status" id="status"></div>
+    </main>
+
+    <script>
+      const applyButton = document.getElementById("apply-button");
+      const resetButton = document.getElementById("reset-button");
+      const closeButton = document.getElementById("close-button");
+      const statusNode = document.getElementById("status");
+
+      function send(type) {
+        parent.postMessage({ pluginMessage: { type } }, "*");
+      }
+
+      function setLoading(isLoading) {
+        applyButton.disabled = isLoading;
+        resetButton.disabled = isLoading;
+      }
+
+      function updateStatus(message, kind) {
+        statusNode.textContent = message || "";
+        statusNode.className = "status";
+        if (kind === "success" || kind === "error") {
+          statusNode.classList.add(kind);
+        }
+      }
+
+      applyButton.addEventListener("click", () => send("apply"));
+      resetButton.addEventListener("click", () => send("reset"));
+      closeButton.addEventListener("click", () => send("close"));
+
+      window.onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (!message || typeof message !== "object") {
+          return;
+        }
+
+        if (message.type === "loading") {
+          setLoading(Boolean(message.isLoading));
+        }
+
+        if (message.type === "status") {
+          updateStatus(message.message, message.kind);
+        }
+      };
+    </script>
+  </body>
+</html>

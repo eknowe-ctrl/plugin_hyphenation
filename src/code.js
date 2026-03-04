@@ -8,6 +8,8 @@ const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
 const WIDTH_EPSILON = 0.01;
+const APPLY_MODE = "apply";
+const RESET_MODE = "reset";
 
 function normalizeTextForRehyphenation(text) {
   return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
@@ -237,20 +239,77 @@ async function loadFontsForNode(node) {
   }
 }
 
-async function run() {
-  const isResetMode = figma.command === "reset";
+function buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography) {
+  if (changedNodes === 0) {
+    if (skippedNodes > 0) {
+      let skippedMessage = `Пропущено слоёв: ${skippedNodes}.`;
+      if (skippedMixedTypography > 0) {
+        skippedMessage += ` Смешанная типографика: ${skippedMixedTypography}.`;
+      }
+      return {
+        kind: "error",
+        text: `Не удалось применить переносы. ${skippedMessage}`
+      };
+    }
+
+    return {
+      kind: "info",
+      text: "Переносы уже применены или русских слов не найдено."
+    };
+  }
+
+  let skippedMessage = "";
+  if (skippedNodes > 0) {
+    skippedMessage = `, пропущено: ${skippedNodes}`;
+    if (skippedMixedTypography > 0) {
+      skippedMessage += ` (смешанная типографика: ${skippedMixedTypography})`;
+    }
+  }
+
+  return {
+    kind: "success",
+    text: `Готово: обработано ${changedNodes} слоёв${skippedMessage}.`
+  };
+}
+
+function buildResetMessage(changedNodes, skippedNodes) {
+  if (changedNodes === 0) {
+    if (skippedNodes > 0) {
+      return {
+        kind: "error",
+        text: `Не удалось выполнить сброс. Пропущено слоёв: ${skippedNodes}.`
+      };
+    }
+
+    return {
+      kind: "info",
+      text: "Сбрасывать нечего: переносы не найдены."
+    };
+  }
+
+  const skippedMessage = skippedNodes > 0 ? `, пропущено: ${skippedNodes}` : "";
+  return {
+    kind: "success",
+    text: `Готово: сброшены переносы в ${changedNodes} слоёв${skippedMessage}.`
+  };
+}
+
+async function processSelection(mode) {
+  const isResetMode = mode === RESET_MODE;
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {
-    figma.notify("Выделите текстовый слой или группу с текстом.");
-    figma.closePlugin();
-    return;
+    return {
+      kind: "error",
+      text: "Выделите текстовый слой или группу с текстом."
+    };
   }
 
   const textNodes = collectTextNodes(selection);
   if (textNodes.length === 0) {
-    figma.notify("В выделении нет текстовых слоёв.");
-    figma.closePlugin();
-    return;
+    return {
+      kind: "error",
+      text: "В выделении нет текстовых слоёв."
+    };
   }
 
   let changedNodes = 0;
@@ -296,41 +355,66 @@ async function run() {
   }
 
   if (isResetMode) {
-    if (changedNodes === 0) {
-      if (skippedNodes > 0) {
-        figma.notify(`Не удалось выполнить сброс. Пропущено слоёв: ${skippedNodes}.`);
-      } else {
-        figma.notify("Сбрасывать нечего: переносы не найдены.");
-      }
-    } else {
-      const skippedMessage =
-        skippedNodes > 0 ? `, пропущено: ${skippedNodes}` : "";
-      figma.notify(`Готово: сброшены переносы в ${changedNodes} слоёв${skippedMessage}.`);
-    }
-  } else {
-    if (changedNodes === 0) {
-      if (skippedNodes > 0) {
-        let skippedMessage = `Пропущено слоёв: ${skippedNodes}.`;
-        if (skippedMixedTypography > 0) {
-          skippedMessage += ` Смешанная типографика: ${skippedMixedTypography}.`;
-        }
-        figma.notify(`Не удалось применить переносы. ${skippedMessage}`);
-      } else {
-        figma.notify("Переносы уже применены или русских слов не найдено.");
-      }
-    } else {
-      let skippedMessage = "";
-      if (skippedNodes > 0) {
-        skippedMessage = `, пропущено: ${skippedNodes}`;
-        if (skippedMixedTypography > 0) {
-          skippedMessage += ` (смешанная типографика: ${skippedMixedTypography})`;
-        }
-      }
-      figma.notify(`Готово: обработано ${changedNodes} слоёв${skippedMessage}.`);
-    }
+    return buildResetMessage(changedNodes, skippedNodes);
   }
 
-  figma.closePlugin();
+  return buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography);
+}
+
+function postUiStatus(message, kind) {
+  figma.ui.postMessage({
+    type: "status",
+    kind,
+    message
+  });
+}
+
+function setUiLoading(isLoading) {
+  figma.ui.postMessage({
+    type: "loading",
+    isLoading
+  });
+}
+
+async function handleAction(mode) {
+  setUiLoading(true);
+  try {
+    const result = await processSelection(mode);
+    figma.notify(result.text);
+    postUiStatus(result.text, result.kind);
+  } catch (error) {
+    console.error("Ошибка выполнения команды плагина", error);
+    const fallback = "Не удалось выполнить команду плагина.";
+    figma.notify(fallback);
+    postUiStatus(fallback, "error");
+  } finally {
+    setUiLoading(false);
+  }
+}
+
+function run() {
+  figma.showUI(__html__, {
+    width: 360,
+    height: 230,
+    themeColors: true
+  });
+
+  postUiStatus("Выделите текст и выберите действие.", "info");
+
+  figma.ui.onmessage = async (message) => {
+    if (!message || typeof message !== "object") {
+      return;
+    }
+
+    if (message.type === "close") {
+      figma.closePlugin();
+      return;
+    }
+
+    if (message.type === APPLY_MODE || message.type === RESET_MODE) {
+      await handleAction(message.type);
+    }
+  };
 }
 
 run();

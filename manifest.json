@@ -4,14 +4,5 @@
   "api": "1.0.0",
   "editorType": ["figma"],
   "main": "code.js",
-  "menu": [
-    {
-      "name": "Применить переносы",
-      "command": "apply"
-    },
-    {
-      "name": "Сбросить переносы",
-      "command": "reset"
-    }
-  ]
+  "ui": "ui.html"
 }
