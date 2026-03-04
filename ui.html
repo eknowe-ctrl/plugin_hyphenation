@@ -26,63 +26,57 @@
         position: relative;
         width: 100%;
         height: 100%;
-        padding: 14px 0 14px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
         background: #ececec;
-        border-radius: 16px;
-        overflow: hidden;
       }
 
-      .close {
+      .close-hitbox {
         position: absolute;
         top: 8px;
-        right: 10px;
+        right: 8px;
         width: 24px;
         height: 24px;
         border: none;
         background: transparent;
-        color: #7f7f7f;
-        font-size: 19px;
-        font-weight: 400;
-        line-height: 1;
+        opacity: 0;
         cursor: pointer;
       }
 
-      .close:hover {
-        color: #5f5f5f;
-      }
-
       .illustration {
-        margin-top: 26px;
+        position: absolute;
+        left: 40px;
+        top: 40px;
         width: 224px;
         height: 132px;
       }
 
       .note {
-        margin: 16px 0 0;
-        width: 214px;
+        position: absolute;
+        left: 53px;
+        top: 220px;
+        width: 194px;
+        margin: 0;
         text-align: center;
-        color: #6d6d6d;
+        color: #6f6f6f;
         font-size: 12px;
-        line-height: 1.35;
-        letter-spacing: 0.2px;
+        line-height: 1.26;
+        letter-spacing: 0.1px;
         white-space: pre-line;
       }
 
       .primary {
-        margin-top: 14px;
+        position: absolute;
+        left: 34px;
+        top: 294px;
         width: 232px;
         height: 50px;
         border: none;
         border-radius: 5px;
-        background: #2f2f31;
-        color: #f2f2f2;
+        background: #2f3134;
+        color: #ececec;
         font-size: 16px;
+        font-weight: 400;
         line-height: 1;
-        letter-spacing: 0.4px;
+        letter-spacing: 0.2px;
         cursor: pointer;
       }
 
@@ -92,13 +86,18 @@
       }
 
       .reset {
-        margin-top: 12px;
+        position: absolute;
+        top: 371px;
+        left: 0;
+        width: 100%;
         border: none;
         background: transparent;
         color: #2499ed;
         font-size: 16px;
+        font-weight: 400;
         line-height: 1;
-        letter-spacing: 0.2px;
+        letter-spacing: 0.1px;
+        text-align: center;
         cursor: pointer;
       }
 
@@ -108,12 +107,15 @@
       }
 
       .author {
-        margin-top: auto;
-        margin-bottom: 0;
-        color: #b0b0b0;
+        position: absolute;
+        left: 0;
+        bottom: 14px;
+        width: 100%;
+        text-align: center;
+        color: #b6b6b6;
         font-size: 14px;
         font-weight: 300;
-        letter-spacing: 0.2px;
+        letter-spacing: 0.1px;
       }
 
       .sr-only {
@@ -129,7 +131,7 @@
   </head>
   <body>
     <main class="panel">
-      <button class="close" id="close-button" aria-label="Закрыть плагин">✕</button>
+      <button class="close-hitbox" id="close-button" aria-label="Закрыть плагин"></button>
 
       <svg
         class="illustration"
