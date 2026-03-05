@@ -42,10 +42,42 @@
         overflow: hidden;
       }
 
-      .hero-svg {
+      .hero-image {
         width: 100%;
         height: 100%;
         display: block;
+        object-fit: cover;
+      }
+
+      .hero-overlay-line {
+        position: absolute;
+        left: 30px;
+        top: 31.2px;
+        width: 188.4px;
+        height: 2.4px;
+        background: #2d9cdb;
+        z-index: 2;
+      }
+
+      .hero-overlay-vline {
+        position: absolute;
+        left: 30px;
+        top: 30px;
+        width: 2.4px;
+        height: 87.6px;
+        background: #2d9cdb;
+        z-index: 2;
+      }
+
+      .hero-overlay-square {
+        position: absolute;
+        left: 22.97px;
+        top: 23.34px;
+        width: 16.18px;
+        height: 16.18px;
+        border: 2.4px solid #2d9cdb;
+        background: #f4f9f9;
+        z-index: 3;
       }
 
       .note {
@@ -63,6 +95,7 @@
         letter-spacing: 0;
         word-wrap: break-word;
         pointer-events: none;
+        z-index: 4;
       }
 
       .primary {
@@ -133,27 +166,10 @@
   <body>
     <main class="panel">
       <div class="hero" aria-hidden="true">
-        <svg class="hero-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 218.4 193.8" fill="none">
-          <defs>
-            <linearGradient id="hero-linear-gradient" x1="109.2" y1="193.8" x2="109.2" y2="0" gradientUnits="userSpaceOnUse">
-              <stop offset=".37" stop-color="#f4f9f9" stop-opacity="0" />
-              <stop offset=".74" stop-color="#fff" />
-            </linearGradient>
-          </defs>
-          <rect width="218.4" height="193.8" rx="4.8" fill="#f4f9f9" />
-          <path d="M30 31.2H218.4" stroke="#2d9cdb" stroke-width="2.4" />
-          <path d="M31.2 30V117.6" stroke="#2d9cdb" stroke-width="2.4" />
-          <rect x="22.97" y="23.34" width="16.18" height="16.18" fill="#f4f9f9" stroke="#2d9cdb" stroke-width="2.4" />
-          <rect x="47.41" y="48.99" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect x="47.41" y="73.68" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect x="47.41" y="98.38" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect x="47.41" y="123.08" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect x="47.41" y="147.77" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect x="47.41" y="172.47" width="170.99" height="15.35" fill="#dce8e8" />
-          <rect width="218.4" height="193.8" fill="url(#hero-linear-gradient)" />
-          <path fill="#fff" d="M64.84,56.19c6.5-2.48,12.84,3.95,10.27,10.41l-20.25,51c-2.48,6.25-11.11,6.82-14.4.95l-10.1-18.06-17.93-10.34c-5.83-3.36-5.14-11.98,1.14-14.38l51.26-19.57ZM70.88,64.92c1.1-2.78-1.62-5.54-4.41-4.47l-51.26,19.57c-2.7,1.03-2.99,4.73-.49,6.18l18.2,10.5c.54.31.98.76,1.28,1.3l10.25,18.34c1.37,2.44,4.89,2.29,6.08-.16l.11-.25,20.25-51Z" />
-          <path fill="#2d9cdb" d="M14.72,86.2c-2.5-1.44-2.21-5.15.49-6.18l51.26-19.57c2.79-1.07,5.51,1.7,4.41,4.47l-20.25,51c-1.07,2.69-4.77,2.93-6.18.41l-10.25-18.34c-.3-.54-.74-.99-1.28-1.3l-18.2-10.49Z" />
-        </svg>
+        <img class="hero-image" src="assets/hero.png" alt="" />
+        <div class="hero-overlay-line"></div>
+        <div class="hero-overlay-vline"></div>
+        <div class="hero-overlay-square"></div>
         <div class="note">Для работы выделите текстовый блок в Figma, затем нажмите нужную кнопку.</div>
       </div>
 
