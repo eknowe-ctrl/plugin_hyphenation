@@ -2,6 +2,7 @@
   "name": "Russian Hyphenation",
   "id": "russian-hyphenation-simple",
   "api": "1.0.0",
+  "documentAccess": "dynamic-page",
   "editorType": ["figma"],
   "main": "code.js",
   "ui": "ui.html"
