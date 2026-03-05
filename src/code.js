@@ -394,8 +394,8 @@ async function handleAction(mode) {
 
 function run() {
   figma.showUI(__html__, {
-    width: 300,
-    height: 408,
+    width: 231,
+    height: 372,
     themeColors: false
   });
 

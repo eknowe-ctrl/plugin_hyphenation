@@ -14,117 +14,60 @@
         width: 100%;
         height: 100%;
         margin: 0;
-        background: white;
-        font-family: "SF Pro", "SF Pro Text", "SF Pro Display", -apple-system,
-          BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+        background: #ffffff;
       }
 
       .panel {
         width: 100%;
         height: 100%;
-        padding-left: 12px;
-        padding-right: 12px;
-        padding-top: 18px;
-        padding-bottom: 18px;
         position: relative;
-        background: white;
+        background: #ffffff;
         overflow: hidden;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 29px;
-        display: inline-flex;
       }
 
-      .hero {
-        width: 218px;
-        height: 148px;
-        position: relative;
-        background: #f4f9f9;
-        overflow: hidden;
-        border-radius: 4.8px;
-      }
-
-      .hero-img {
-        width: 218.67px;
-        height: 148px;
-        left: -0.33px;
+      .layout-svg {
+        width: 231.2px;
+        height: 371.63px;
+        left: 0;
         top: 0;
         position: absolute;
-        object-fit: cover;
-      }
-
-      .note {
-        width: 186.64px;
-        height: 39.79px;
-        opacity: 0.8;
-        text-align: center;
-        color: #333333;
-        font-size: 11px;
-        font-weight: 400;
-        line-height: 13.2px;
-        font-family: "SF Pro", "SF Pro Text", "SF Pro Display", -apple-system,
-          BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-        word-wrap: break-word;
+        display: block;
+        user-select: none;
+        pointer-events: none;
       }
 
       .primary {
-        padding-left: 33.6px;
-        padding-right: 33.6px;
-        padding-top: 17.4px;
-        padding-bottom: 17.4px;
-        background: #333333;
-        overflow: hidden;
-        border-radius: 4.8px;
-        justify-content: center;
-        align-items: center;
-        gap: 6px;
-        display: inline-flex;
+        position: absolute;
+        left: 0;
+        top: 240.79px;
+        width: 231.2px;
+        height: 51.8px;
         border: none;
-        text-align: center;
-        color: white;
-        font-size: 14.4px;
-        font-family: "SF Pro", "SF Pro Text", "SF Pro Display", -apple-system,
-          BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-        font-weight: 400;
-        letter-spacing: 0.58px;
-        word-wrap: break-word;
+        background: transparent;
+        padding: 0;
         cursor: pointer;
       }
 
       .primary:disabled {
         cursor: default;
-        opacity: 0.65;
+        opacity: 0.4;
       }
 
       .reset {
+        position: absolute;
+        left: 56px;
+        top: 318px;
+        width: 120px;
+        height: 32px;
         border: none;
         background: transparent;
-        text-align: center;
-        color: #2d9cdb;
-        font-size: 14.4px;
-        font-family: "SF Pro", "SF Pro Text", "SF Pro Display", -apple-system,
-          BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-        font-weight: 400;
-        letter-spacing: 0.58px;
-        word-wrap: break-word;
+        padding: 0;
         cursor: pointer;
       }
 
       .reset:disabled {
         cursor: default;
-        opacity: 0.65;
-      }
-
-      .author {
-        text-align: center;
-        color: #bdbdbd;
-        font-size: 11px;
-        font-family: "SF Pro", "SF Pro Text", "SF Pro Display", -apple-system,
-          BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-        font-weight: 400;
-        letter-spacing: 0.44px;
-        word-wrap: break-word;
+        opacity: 0.4;
       }
 
       .sr-only {
@@ -140,14 +83,9 @@
   </head>
   <body>
     <main class="panel">
-      <div class="hero" aria-hidden="true">
-        <img class="hero-img" src="assets/hero.png" alt="" />
-      </div>
-
-      <div class="note">Для работы выделите текстовый блок в Figma, затем нажмите нужную кнопку.</div>
-      <button class="primary" id="apply-button">Применить переносы</button>
-      <button class="reset" id="reset-button">Сбросить</button>
-      <div class="author">by Eugeny Leshchenko</div>
+      <img class="layout-svg" src="assets/ui-layout.svg" alt="" aria-hidden="true" />
+      <button class="primary" id="apply-button" aria-label="Применить переносы"></button>
+      <button class="reset" id="reset-button" aria-label="Сбросить"></button>
       <div class="sr-only" id="status" aria-live="polite"></div>
     </main>
 
