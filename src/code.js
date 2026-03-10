@@ -19,9 +19,10 @@ let autoRecalcTimer = null;
 let autoRecalcInProgress = false;
 let autoRecalcQueued = false;
 let suppressDocumentChangeUntil = 0;
+let manualActionInProgress = false;
 
 function normalizeTextForRehyphenation(text) {
-  return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
+  return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
 }
 
 function resetHyphenationText(text) {
@@ -321,7 +322,11 @@ function didWatchedWidthChange() {
 }
 
 function suppressOwnDocumentChanges() {
-  suppressDocumentChangeUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+  const nextSuppressUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+  suppressDocumentChangeUntil = Math.max(
+    suppressDocumentChangeUntil,
+    nextSuppressUntil
+  );
 }
 
 function buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography) {
@@ -524,6 +529,7 @@ async function runAutoRecalc() {
     postUiStatus("Не удалось выполнить автопересчёт при изменении ширины.", "error");
   } finally {
     autoRecalcInProgress = false;
+    suppressOwnDocumentChanges();
     setUiLoading(false);
 
     if (autoRecalcQueued) {
@@ -534,6 +540,7 @@ async function runAutoRecalc() {
 }
 
 async function handleAction(mode) {
+  manualActionInProgress = true;
   setUiLoading(true);
   suppressOwnDocumentChanges();
   try {
@@ -570,7 +577,14 @@ async function handleAction(mode) {
     figma.notify(fallback);
     postUiStatus(fallback, "error");
   } finally {
+    manualActionInProgress = false;
+    suppressOwnDocumentChanges();
     setUiLoading(false);
+
+    if (autoRecalcQueued && watchedNodeIds.size > 0) {
+      autoRecalcQueued = false;
+      scheduleAutoRecalc();
+    }
   }
 }
 
@@ -589,6 +603,13 @@ function run() {
     }
 
     if (Date.now() < suppressDocumentChangeUntil) {
+      return;
+    }
+
+    if (manualActionInProgress || autoRecalcInProgress) {
+      if (didWatchedWidthChange()) {
+        autoRecalcQueued = true;
+      }
       return;
     }
 

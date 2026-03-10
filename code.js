@@ -149,8 +149,9 @@
   var autoRecalcInProgress = false;
   var autoRecalcQueued = false;
   var suppressDocumentChangeUntil = 0;
+  var manualActionInProgress = false;
   function normalizeTextForRehyphenation(text) {
-    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
+    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
   }
   function resetHyphenationText(text) {
     return normalizeTextForRehyphenation(text);
@@ -395,7 +396,11 @@
     return changed;
   }
   function suppressOwnDocumentChanges() {
-    suppressDocumentChangeUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+    const nextSuppressUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+    suppressDocumentChangeUntil = Math.max(
+      suppressDocumentChangeUntil,
+      nextSuppressUntil
+    );
   }
   function buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography) {
     if (changedNodes === 0) {
@@ -567,6 +572,7 @@
       postUiStatus("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B.", "error");
     } finally {
       autoRecalcInProgress = false;
+      suppressOwnDocumentChanges();
       setUiLoading(false);
       if (autoRecalcQueued) {
         autoRecalcQueued = false;
@@ -575,6 +581,7 @@
     }
   }
   async function handleAction(mode) {
+    manualActionInProgress = true;
     setUiLoading(true);
     suppressOwnDocumentChanges();
     try {
@@ -609,7 +616,13 @@
       figma.notify(fallback);
       postUiStatus(fallback, "error");
     } finally {
+      manualActionInProgress = false;
+      suppressOwnDocumentChanges();
       setUiLoading(false);
+      if (autoRecalcQueued && watchedNodeIds.size > 0) {
+        autoRecalcQueued = false;
+        scheduleAutoRecalc();
+      }
     }
   }
   function run() {
@@ -624,6 +637,12 @@
         return;
       }
       if (Date.now() < suppressDocumentChangeUntil) {
+        return;
+      }
+      if (manualActionInProgress || autoRecalcInProgress) {
+        if (didWatchedWidthChange()) {
+          autoRecalcQueued = true;
+        }
         return;
       }
       if (!didWatchedWidthChange()) {
