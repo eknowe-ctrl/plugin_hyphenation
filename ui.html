@@ -14,114 +14,245 @@
         width: 100%;
         height: 100%;
         margin: 0;
-        background: #ffffff;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        background: #f7f8fb;
+        color: #1f2937;
       }
 
       .panel {
-        width: 100%;
         height: 100%;
-        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        padding: 14px 16px 10px;
+        border-bottom: 1px solid #e5e7eb;
         background: #ffffff;
-        overflow: hidden;
       }
 
-      .layout-svg {
-        width: 231.2px;
-        height: 371.63px;
-        left: 20px;
-        top: 30px;
-        position: absolute;
-        display: block;
-        user-select: none;
-        pointer-events: none;
+      .title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
       }
 
-      .primary {
-        position: absolute;
-        left: 20px;
-        top: 270.79px;
-        width: 231.2px;
-        height: 51.8px;
-        border: none;
-        background: transparent;
-        padding: 0;
-        cursor: pointer;
+      .subtitle {
+        margin: 6px 0 0;
+        font-size: 11px;
+        color: #6b7280;
       }
 
-      .primary:disabled {
-        cursor: default;
-        opacity: 0.4;
+      .content {
+        flex: 1;
+        overflow: auto;
+        padding: 12px 16px 10px;
       }
 
-      .reset {
-        position: absolute;
-        left: 76px;
-        top: 348px;
-        width: 120px;
+      .section {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+
+      .section h3 {
+        margin: 0 0 8px;
+        font-size: 12px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 6px 0;
+        font-size: 11px;
+      }
+
+      .row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      select,
+      input[type="number"] {
+        width: 112px;
+        height: 28px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        padding: 4px 8px;
+        background: #ffffff;
+        font-size: 11px;
+      }
+
+      input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+      }
+
+      .actions button {
         height: 32px;
-        border: none;
-        background: transparent;
-        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        font-size: 11px;
         cursor: pointer;
       }
 
-      .reset:disabled {
-        cursor: default;
-        opacity: 0.4;
+      #apply-button {
+        background: #111827;
+        color: #ffffff;
       }
 
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        border: 0;
+      #reset-button {
+        border-color: #9ca3af;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      #close-button {
+        border-color: #d1d5db;
+        background: #f9fafb;
+        color: #374151;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .status {
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.35;
+        color: #374151;
+        min-height: 30px;
+      }
+
+      .status[data-kind="error"] {
+        color: #b91c1c;
+      }
+
+      .status[data-kind="success"] {
+        color: #065f46;
+      }
+
+      .debug-list {
+        margin: 0;
+        padding-left: 16px;
+        font-size: 10.5px;
+        line-height: 1.35;
+        max-height: 170px;
+        overflow: auto;
+      }
+
+      .debug-meta {
+        font-size: 10.5px;
+        color: #4b5563;
+        margin-bottom: 6px;
       }
     </style>
   </head>
   <body>
     <main class="panel">
-      <svg class="layout-svg" viewBox="0 0 231.2 371.63" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect width="231.2" height="371.63" fill="#ffffff" />
+      <header class="header">
+        <h1 class="title">Russian Hyphenation</h1>
+        <p class="subtitle">Настройки сохраняются между запусками плагина</p>
+      </header>
 
-        <g>
-          <rect x="6.6" y="0" width="218" height="163" rx="4.8" fill="#F4F9F9" />
-          <path fill="#F4F9F9" d="M29.37,23.34h16.18v16.18h-16.18v-16.18Z" />
-          <path fill="#2D9CDB" d="M45.55,39.52v-7.12h179.05v-2.4H45.55v-6.66h-16.18v16.18h7.03v34.85l-14.79,5.65c-2.7,1.03-2.99,4.73-.49,6.18l15.28,8.81v68.11h2.4v-66.73l.51.3c.54.31.98.76,1.28,1.3l10.25,18.34c1.41,2.52,5.12,2.28,6.18-.41l20.25-51c1.1-2.78-1.62-5.54-4.41-4.47l-34.07,13.01v-33.94h6.75ZM31.77,37.12v-11.38h11.38v11.38h-11.38Z" />
-          <g>
-            <rect x="53.81" y="123.08" width="170.79" height="15.35" fill="#DCE8E8" />
-            <path fill="#DCE8E8" d="M53.81,163.13h165.5c2.92,0,5.29-2.37,5.29-5.29v-10.07H53.81v15.35Z" />
-            <polygon fill="#DCE8E8" points="62.8 113.73 224.6 113.73 224.6 98.38 68.9 98.38 62.8 113.73" />
-            <polygon fill="#DCE8E8" points="72.61 89.04 224.6 89.04 224.6 73.68 78.7 73.68 72.61 89.04" />
-            <path fill="#DCE8E8" d="M53.81,48.99v13.86l17.43-6.65c5.73-2.19,11.34,2.56,10.81,8.15h142.54v-15.35H53.81Z" />
-          </g>
-        </g>
+      <div class="content">
+        <section class="section">
+          <h3>Профиль типографики</h3>
+          <div class="row">
+            <span>Preset</span>
+            <select id="preset">
+              <option value="interface">Interface</option>
+              <option value="book">Book</option>
+              <option value="dense">Dense</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="autoWatch" /> Автопересчёт при изменении ширины</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="preventOrphans" /> Анти-висячие предлоги</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="hangingHyphen" /> Висячий дефис</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="optimizeLetterSpacing" /> Оптимизация letter spacing</label>
+          </div>
+        </section>
 
-        <text x="115.6" y="183" text-anchor="middle" fill="#333333" opacity="0.8" font-size="11" font-family="Inter, sans-serif">
-          <tspan x="115.6" dy="0">Для работы выделите текстовый блок</tspan>
-          <tspan x="115.6" dy="13.2">в Figma, затем нажмите нужную</tspan>
-          <tspan x="115.6" dy="13.2">кнопку.</tspan>
-        </text>
+        <section class="section">
+          <h3>Letter spacing (%)</h3>
+          <div class="row">
+            <span>Minimum</span>
+            <input id="lsMin" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Desired</span>
+            <input id="lsDesired" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Maximum</span>
+            <input id="lsMax" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Step</span>
+            <input id="lsStep" type="number" min="0.1" step="0.1" />
+          </div>
+        </section>
 
-        <rect x="0" y="240.79" width="231.2" height="51.8" rx="4.8" fill="#333333" />
-        <text x="115.6" y="271.5" text-anchor="middle" fill="#ffffff" font-size="14.4" font-family="Inter, sans-serif" letter-spacing="0.58">Применить переносы</text>
-        <text x="115.6" y="333" text-anchor="middle" fill="#2D9CDB" font-size="14.4" font-family="Inter, sans-serif" letter-spacing="0.58">Сбросить</text>
-        <text x="115.6" y="369" text-anchor="middle" fill="#BDBDBD" font-size="11" font-family="Inter, sans-serif" letter-spacing="0.44">by Eugeny Leshchenko</text>
-      </svg>
-      <button class="primary" id="apply-button" aria-label="Применить переносы"></button>
-      <button class="reset" id="reset-button" aria-label="Сбросить"></button>
-      <div class="sr-only" id="status" aria-live="polite"></div>
+        <section class="section">
+          <h3>Отладка пропусков</h3>
+          <div class="debug-meta" id="debug-meta">Нет данных</div>
+          <ul class="debug-list" id="debug-list"></ul>
+        </section>
+
+        <section class="section">
+          <div class="actions">
+            <button id="apply-button">Применить</button>
+            <button id="reset-button">Сбросить</button>
+            <button id="close-button">Закрыть</button>
+          </div>
+          <div class="status" id="status" aria-live="polite"></div>
+        </section>
+      </div>
     </main>
 
     <script>
       const applyButton = document.getElementById("apply-button");
       const resetButton = document.getElementById("reset-button");
+      const closeButton = document.getElementById("close-button");
+      const presetSelect = document.getElementById("preset");
       const statusNode = document.getElementById("status");
+      const debugMeta = document.getElementById("debug-meta");
+      const debugList = document.getElementById("debug-list");
 
-      function send(type) {
-        parent.postMessage({ pluginMessage: { type } }, "*");
+      const fields = {
+        autoWatch: document.getElementById("autoWatch"),
+        preventOrphans: document.getElementById("preventOrphans"),
+        hangingHyphen: document.getElementById("hangingHyphen"),
+        optimizeLetterSpacing: document.getElementById("optimizeLetterSpacing"),
+        letterSpacingMinPercent: document.getElementById("lsMin"),
+        letterSpacingDesiredPercent: document.getElementById("lsDesired"),
+        letterSpacingMaxPercent: document.getElementById("lsMax"),
+        letterSpacingStepPercent: document.getElementById("lsStep")
+      };
+
+      function send(type, payload = {}) {
+        parent.postMessage({ pluginMessage: { type, ...payload } }, "*");
       }
 
       function setLoading(isLoading) {
@@ -134,8 +265,78 @@
         statusNode.setAttribute("data-kind", kind || "");
       }
 
+      function setNumeric(input, value) {
+        input.value = Number.isFinite(value) ? String(value) : "0";
+      }
+
+      function renderSettings(settings) {
+        if (!settings) {
+          return;
+        }
+        presetSelect.value = settings.preset || "custom";
+        fields.autoWatch.checked = Boolean(settings.autoWatch);
+        fields.preventOrphans.checked = Boolean(settings.preventOrphans);
+        fields.hangingHyphen.checked = Boolean(settings.hangingHyphen);
+        fields.optimizeLetterSpacing.checked = Boolean(settings.optimizeLetterSpacing);
+        setNumeric(fields.letterSpacingMinPercent, Number(settings.letterSpacingMinPercent));
+        setNumeric(fields.letterSpacingDesiredPercent, Number(settings.letterSpacingDesiredPercent));
+        setNumeric(fields.letterSpacingMaxPercent, Number(settings.letterSpacingMaxPercent));
+        setNumeric(fields.letterSpacingStepPercent, Number(settings.letterSpacingStepPercent));
+      }
+
+      function collectManualSettings() {
+        return {
+          autoWatch: fields.autoWatch.checked,
+          preventOrphans: fields.preventOrphans.checked,
+          hangingHyphen: fields.hangingHyphen.checked,
+          optimizeLetterSpacing: fields.optimizeLetterSpacing.checked,
+          letterSpacingMinPercent: Number(fields.letterSpacingMinPercent.value),
+          letterSpacingDesiredPercent: Number(fields.letterSpacingDesiredPercent.value),
+          letterSpacingMaxPercent: Number(fields.letterSpacingMaxPercent.value),
+          letterSpacingStepPercent: Number(fields.letterSpacingStepPercent.value)
+        };
+      }
+
+      function renderDebug(debug) {
+        if (!debug) {
+          debugMeta.textContent = "Нет данных";
+          debugList.innerHTML = "";
+          return;
+        }
+
+        debugMeta.textContent = `mode: ${debug.mode}, changed: ${debug.changedNodes}/${debug.totalNodes}, skipped: ${debug.skippedNodes}`;
+        debugList.innerHTML = "";
+
+        if (!Array.isArray(debug.skippedReasons) || debug.skippedReasons.length === 0) {
+          return;
+        }
+
+        for (const item of debug.skippedReasons) {
+          const li = document.createElement("li");
+          const name = item.nodeName || item.nodeId || "unknown";
+          li.textContent = `${name}: ${item.reason}`;
+          debugList.appendChild(li);
+        }
+      }
+
       applyButton.addEventListener("click", () => send("apply"));
       resetButton.addEventListener("click", () => send("reset"));
+      closeButton.addEventListener("click", () => send("close"));
+
+      presetSelect.addEventListener("change", () => {
+        if (presetSelect.value === "custom") {
+          return;
+        }
+        send("select-preset", { preset: presetSelect.value });
+      });
+
+      Object.values(fields).forEach((node) => {
+        node.addEventListener("change", () => {
+          send("save-settings", {
+            settings: collectManualSettings()
+          });
+        });
+      });
 
       window.onmessage = (event) => {
         const message = event.data.pluginMessage;
@@ -150,7 +351,17 @@
         if (message.type === "status") {
           updateStatus(message.message, message.kind);
         }
+
+        if (message.type === "settings") {
+          renderSettings(message.settings);
+        }
+
+        if (message.type === "debug") {
+          renderDebug(message.debug);
+        }
       };
+
+      send("request-settings");
     </script>
   </body>
 </html>

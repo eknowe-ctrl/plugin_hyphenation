@@ -8,10 +8,75 @@ const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
 const WIDTH_EPSILON = 0.01;
+const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
 const SELF_CHANGE_SUPPRESS_MS = 600;
+const SETTINGS_STORAGE_KEY = "hyphenationSettingsV4";
+const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
+const CUSTOM_PRESET = "custom";
+
+const TYPOGRAPHY_PRESETS = {
+  interface: {
+    autoWatch: true,
+    preventOrphans: true,
+    hangingHyphen: true,
+    optimizeLetterSpacing: true,
+    letterSpacingMinPercent: -3,
+    letterSpacingDesiredPercent: 0,
+    letterSpacingMaxPercent: 3,
+    letterSpacingStepPercent: 0.5
+  },
+  book: {
+    autoWatch: true,
+    preventOrphans: true,
+    hangingHyphen: false,
+    optimizeLetterSpacing: true,
+    letterSpacingMinPercent: -1,
+    letterSpacingDesiredPercent: 0,
+    letterSpacingMaxPercent: 1,
+    letterSpacingStepPercent: 0.5
+  },
+  dense: {
+    autoWatch: true,
+    preventOrphans: true,
+    hangingHyphen: true,
+    optimizeLetterSpacing: true,
+    letterSpacingMinPercent: -4,
+    letterSpacingDesiredPercent: -1,
+    letterSpacingMaxPercent: 2,
+    letterSpacingStepPercent: 0.5
+  }
+};
+
+const ORPHAN_WORDS = new Set([
+  "в",
+  "с",
+  "к",
+  "у",
+  "о",
+  "а",
+  "и",
+  "я",
+  "на",
+  "за",
+  "по",
+  "от",
+  "до",
+  "из",
+  "со",
+  "не",
+  "ни",
+  "но",
+  "да",
+  "об"
+]);
+
+const DEFAULT_SETTINGS = {
+  preset: "interface",
+  ...TYPOGRAPHY_PRESETS.interface
+};
 
 let watchedNodeIds = new Set();
 let watchedNodeWidths = new Map();
@@ -20,20 +85,224 @@ let autoRecalcInProgress = false;
 let autoRecalcQueued = false;
 let suppressDocumentChangeUntil = 0;
 let manualActionInProgress = false;
+let runtimeSettings = { ...DEFAULT_SETTINGS };
+
+function clampNumber(value, minValue, maxValue) {
+  if (Number.isNaN(value)) {
+    return minValue;
+  }
+  return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function normalizePresetName(value) {
+  if (typeof value !== "string") {
+    return CUSTOM_PRESET;
+  }
+  if (value in TYPOGRAPHY_PRESETS || value === CUSTOM_PRESET) {
+    return value;
+  }
+  return CUSTOM_PRESET;
+}
+
+function normalizeSettings(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const preset = normalizePresetName(source.preset || DEFAULT_SETTINGS.preset);
+
+  const fallbackProfile =
+    preset in TYPOGRAPHY_PRESETS
+      ? TYPOGRAPHY_PRESETS[preset]
+      : TYPOGRAPHY_PRESETS[DEFAULT_SETTINGS.preset];
+
+  const autoWatch =
+    typeof source.autoWatch === "boolean"
+      ? source.autoWatch
+      : fallbackProfile.autoWatch;
+  const preventOrphans =
+    typeof source.preventOrphans === "boolean"
+      ? source.preventOrphans
+      : fallbackProfile.preventOrphans;
+  const hangingHyphen =
+    typeof source.hangingHyphen === "boolean"
+      ? source.hangingHyphen
+      : fallbackProfile.hangingHyphen;
+  const optimizeLetterSpacing =
+    typeof source.optimizeLetterSpacing === "boolean"
+      ? source.optimizeLetterSpacing
+      : fallbackProfile.optimizeLetterSpacing;
+
+  const minPercent = clampNumber(
+    Number(source.letterSpacingMinPercent ?? fallbackProfile.letterSpacingMinPercent),
+    -10,
+    10
+  );
+  const desiredPercent = clampNumber(
+    Number(
+      source.letterSpacingDesiredPercent ??
+        fallbackProfile.letterSpacingDesiredPercent
+    ),
+    -10,
+    10
+  );
+  const maxPercent = clampNumber(
+    Number(source.letterSpacingMaxPercent ?? fallbackProfile.letterSpacingMaxPercent),
+    -10,
+    10
+  );
+
+  const stepPercent = clampNumber(
+    Number(source.letterSpacingStepPercent ?? fallbackProfile.letterSpacingStepPercent),
+    0.1,
+    5
+  );
+
+  const sortedMin = Math.min(minPercent, maxPercent);
+  const sortedMax = Math.max(minPercent, maxPercent);
+  const sortedDesired = clampNumber(desiredPercent, sortedMin, sortedMax);
+
+  return {
+    preset,
+    autoWatch,
+    preventOrphans,
+    hangingHyphen,
+    optimizeLetterSpacing,
+    letterSpacingMinPercent: sortedMin,
+    letterSpacingDesiredPercent: sortedDesired,
+    letterSpacingMaxPercent: sortedMax,
+    letterSpacingStepPercent: stepPercent
+  };
+}
+
+function getPresetSettings(presetName) {
+  const name = normalizePresetName(presetName);
+  if (!(name in TYPOGRAPHY_PRESETS)) {
+    return null;
+  }
+  return normalizeSettings({
+    preset: name,
+    ...TYPOGRAPHY_PRESETS[name]
+  });
+}
+
+async function loadRuntimeSettings() {
+  try {
+    const saved = await figma.clientStorage.getAsync(SETTINGS_STORAGE_KEY);
+    if (!saved || typeof saved !== "object") {
+      runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
+      return;
+    }
+    runtimeSettings = normalizeSettings(saved);
+  } catch (error) {
+    console.error("Не удалось загрузить настройки плагина", error);
+    runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
+  }
+}
+
+async function persistRuntimeSettings() {
+  try {
+    await figma.clientStorage.setAsync(SETTINGS_STORAGE_KEY, runtimeSettings);
+  } catch (error) {
+    console.error("Не удалось сохранить настройки плагина", error);
+  }
+}
 
 function normalizeTextForRehyphenation(text) {
   return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
 }
 
 function resetHyphenationText(text) {
-  return normalizeTextForRehyphenation(text);
+  return normalizeTextForRehyphenation(text).replace(
+    /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
+    (match, prefix, word) => {
+      if (!ORPHAN_WORDS.has(word.toLowerCase())) {
+        return match;
+      }
+      return `${prefix}${word} `;
+    }
+  );
+}
+
+function preventRussianOrphans(text) {
+  return text.replace(
+    /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})[^\S\n]+(?=[А-Яа-яЁё0-9])/g,
+    (match, prefix, word) => {
+      if (!ORPHAN_WORDS.has(word.toLowerCase())) {
+        return match;
+      }
+      return `${prefix}${word}${NBSP}`;
+    }
+  );
+}
+
+function serializeLetterSpacing(letterSpacing) {
+  if (!letterSpacing || letterSpacing === figma.mixed) {
+    return null;
+  }
+  if (letterSpacing.unit !== "PIXELS" && letterSpacing.unit !== "PERCENT") {
+    return null;
+  }
+  if (typeof letterSpacing.value !== "number") {
+    return null;
+  }
+  return {
+    unit: letterSpacing.unit,
+    value: letterSpacing.value
+  };
+}
+
+function readNodeSnapshot(node) {
+  const raw = node.getPluginData(SNAPSHOT_PLUGIN_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.text !== "string") {
+      return null;
+    }
+    return {
+      text: parsed.text,
+      letterSpacing: serializeLetterSpacing(parsed.letterSpacing)
+    };
+  } catch (error) {
+    console.warn("Не удалось прочитать snapshot слоя", error);
+    return null;
+  }
+}
+
+function writeNodeSnapshot(node, text, letterSpacing) {
+  try {
+    node.setPluginData(
+      SNAPSHOT_PLUGIN_KEY,
+      JSON.stringify({
+        text,
+        letterSpacing: serializeLetterSpacing(letterSpacing)
+      })
+    );
+  } catch (error) {
+    console.warn("Не удалось сохранить snapshot слоя", error);
+  }
+}
+
+function clearNodeSnapshot(node) {
+  try {
+    node.setPluginData(SNAPSHOT_PLUGIN_KEY, "");
+  } catch (error) {
+    console.warn("Не удалось очистить snapshot слоя", error);
+  }
+}
+
+function countInsertedBreaks(text) {
+  const matches = text.match(/-\u200B/g);
+  return matches ? matches.length : 0;
 }
 
 function fitsWithinWidth(text, maxWidth, measureWidth) {
   return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
 }
 
-function findBestBreakInToken(token, remainingWidth, measureWidth) {
+function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
+  const useHangingHyphen = Boolean(options && options.hangingHyphen);
   const match = token.match(RUSSIAN_TOKEN_REGEX);
   if (!match) {
     return null;
@@ -56,8 +325,18 @@ function findBestBreakInToken(token, remainingWidth, measureWidth) {
     const leftCore = parts.slice(0, i).join("");
     const rightCore = parts.slice(i).join("");
     const leftWithDash = `${leading}${leftCore}-`;
+    const leftWithoutDash = `${leading}${leftCore}`;
+    const widthWithoutDash = measureWidth(leftWithoutDash);
+    const widthWithDash = measureWidth(leftWithDash);
+    const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
 
-    if (fitsWithinWidth(leftWithDash, remainingWidth, measureWidth)) {
+    const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
+    const fitsWithHangingHyphen =
+      useHangingHyphen &&
+      widthWithoutDash <= remainingWidth + WIDTH_EPSILON &&
+      widthWithDash <= remainingWidth + dashWidth + 0.5;
+
+    if (fitsNormally || fitsWithHangingHyphen) {
       return {
         left: `${leading}${leftCore}`,
         right: `${rightCore}${trailing}`
@@ -68,7 +347,7 @@ function findBestBreakInToken(token, remainingWidth, measureWidth) {
   return null;
 }
 
-function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
+function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
   const normalized = normalizeTextForRehyphenation(text);
   const tokens = normalized.match(TOKEN_REGEX);
 
@@ -110,7 +389,8 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
         const breakPoint = findBestBreakInToken(
           chunk,
           remainingWidth,
-          measureWidth
+          measureWidth,
+          options
         );
 
         if (breakPoint) {
@@ -133,7 +413,12 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
         break;
       }
 
-      const breakPoint = findBestBreakInToken(chunk, maxWidth, measureWidth);
+      const breakPoint = findBestBreakInToken(
+        chunk,
+        maxWidth,
+        measureWidth,
+        options
+      );
       if (breakPoint) {
         result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
         chunk = breakPoint.right;
@@ -154,6 +439,128 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth) {
   return result;
 }
 
+function getNodeLetterSpacing(node) {
+  const spacing = node.letterSpacing;
+  if (!spacing || spacing === figma.mixed) {
+    return {
+      unit: "PIXELS",
+      value: 0
+    };
+  }
+  return spacing;
+}
+
+function sameLetterSpacing(a, b) {
+  return a.unit === b.unit && Math.abs(a.value - b.value) < 0.0001;
+}
+
+function restoreFromSnapshot(node) {
+  const snapshot = readNodeSnapshot(node);
+  if (!snapshot) {
+    return false;
+  }
+
+  let changed = false;
+  if (node.characters !== snapshot.text) {
+    node.characters = snapshot.text;
+    changed = true;
+  }
+
+  if (
+    snapshot.letterSpacing &&
+    !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node))
+  ) {
+    node.letterSpacing = snapshot.letterSpacing;
+    changed = true;
+  }
+
+  clearNodeSnapshot(node);
+  return changed;
+}
+
+function convertPercentSpacingToNodeUnit(percentSpacing, node, unit) {
+  if (unit === "PERCENT") {
+    return percentSpacing;
+  }
+  const fontSize = typeof node.fontSize === "number" ? node.fontSize : 0;
+  return (fontSize * percentSpacing) / 100;
+}
+
+function convertNodeSpacingToPercent(spacing, node) {
+  if (!spacing) {
+    return 0;
+  }
+  if (spacing.unit === "PERCENT") {
+    return spacing.value;
+  }
+  const fontSize = typeof node.fontSize === "number" ? node.fontSize : 0;
+  if (fontSize <= 0) {
+    return 0;
+  }
+  return (spacing.value / fontSize) * 100;
+}
+
+function buildAlternatingPercentRange(minPercent, desiredPercent, maxPercent, stepPercent) {
+  const result = [];
+  const seen = new Set();
+
+  function pushIfUnique(value) {
+    const rounded = Number(value.toFixed(4));
+    if (rounded < minPercent - 0.0001 || rounded > maxPercent + 0.0001) {
+      return;
+    }
+    const key = rounded.toFixed(4);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    result.push(rounded);
+  }
+
+  pushIfUnique(desiredPercent);
+  const maxDistance = Math.max(
+    Math.abs(desiredPercent - minPercent),
+    Math.abs(maxPercent - desiredPercent)
+  );
+
+  for (let distance = stepPercent; distance <= maxDistance + 0.0001; distance += stepPercent) {
+    pushIfUnique(desiredPercent - distance);
+    pushIfUnique(desiredPercent + distance);
+  }
+
+  return result;
+}
+
+function getLetterSpacingCandidates(node, settings) {
+  const baseSpacing = getNodeLetterSpacing(node);
+  const percentCandidates = buildAlternatingPercentRange(
+    settings.letterSpacingMinPercent,
+    settings.letterSpacingDesiredPercent,
+    settings.letterSpacingMaxPercent,
+    settings.letterSpacingStepPercent
+  );
+  const candidates = [];
+  const seen = new Set();
+
+  for (const percentValue of percentCandidates) {
+    const value = convertPercentSpacingToNodeUnit(percentValue, node, baseSpacing.unit);
+    const key = `${baseSpacing.unit}:${value.toFixed(4)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    candidates.push({
+      letterSpacing: {
+        unit: baseSpacing.unit,
+        value
+      },
+      percentValue
+    });
+  }
+
+  return candidates;
+}
+
 function hasMixedTypography(node) {
   const props = [
     node.fontName,
@@ -167,7 +574,7 @@ function hasMixedTypography(node) {
   return props.some((value) => value === figma.mixed);
 }
 
-function createWidthMeasurer(node) {
+function createWidthMeasurer(node, letterSpacing) {
   const probe = figma.createText();
   probe.visible = false;
   probe.x = -100000;
@@ -176,7 +583,7 @@ function createWidthMeasurer(node) {
   probe.fontName = node.fontName;
   probe.fontSize = node.fontSize;
   probe.lineHeight = node.lineHeight;
-  probe.letterSpacing = node.letterSpacing;
+  probe.letterSpacing = letterSpacing || node.letterSpacing;
   probe.textCase = node.textCase;
   probe.textDecoration = node.textDecoration;
 
@@ -389,7 +796,8 @@ async function processSelection(mode) {
   if (selection.length === 0) {
     return {
       kind: "error",
-      text: "Выделите текстовый слой или группу с текстом."
+      text: "Выделите текстовый слой или группу с текстом.",
+      debug: null
     };
   }
 
@@ -397,63 +805,170 @@ async function processSelection(mode) {
   if (textNodes.length === 0) {
     return {
       kind: "error",
-      text: "В выделении нет текстовых слоёв."
+      text: "В выделении нет текстовых слоёв.",
+      debug: null
     };
   }
 
-  return processTextNodes(textNodes, mode);
+  return processTextNodes(textNodes, mode, runtimeSettings);
 }
 
-async function processTextNodes(textNodes, mode) {
+async function processTextNodes(textNodes, mode, settings) {
   const isResetMode = mode === RESET_MODE;
 
   let changedNodes = 0;
   let skippedNodes = 0;
   let skippedMixedTypography = 0;
+  const skippedReasons = [];
+
+  function pushSkippedReason(node, reason) {
+    if (skippedReasons.length >= 80) {
+      return;
+    }
+    skippedReasons.push({
+      nodeId: node.id,
+      nodeName: node.name,
+      reason
+    });
+  }
 
   for (const node of textNodes) {
     try {
       await loadFontsForNode(node);
 
       const original = node.characters;
+      const originalLetterSpacing = getNodeLetterSpacing(node);
       let transformed = original;
+      let hasNodeChanges = false;
 
       if (isResetMode) {
+        if (restoreFromSnapshot(node)) {
+          changedNodes += 1;
+          continue;
+        }
         transformed = resetHyphenationText(original);
       } else {
         if (hasMixedTypography(node)) {
           skippedNodes += 1;
           skippedMixedTypography += 1;
+          pushSkippedReason(node, "Смешанная типографика");
           continue;
         }
 
-        const measurer = createWidthMeasurer(node);
-        try {
-          transformed = hyphenateRussianTextWithVisibleDash(
-            original,
-            node.width,
-            measurer.measure
-          );
-        } finally {
-          measurer.destroy();
+        const normalized = normalizeTextForRehyphenation(original);
+        const preparedText = settings.preventOrphans
+          ? preventRussianOrphans(normalized)
+          : normalized;
+
+        if (settings.optimizeLetterSpacing) {
+          const currentSpacing = getNodeLetterSpacing(node);
+          const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
+          const candidates = getLetterSpacingCandidates(node, settings);
+
+          let bestText = preparedText;
+          let bestSpacing = currentSpacing;
+          let bestBreakCount = Number.POSITIVE_INFINITY;
+          let bestDesiredPenalty = Number.POSITIVE_INFINITY;
+          let bestCurrentPenalty = Number.POSITIVE_INFINITY;
+
+          for (const candidate of candidates) {
+            const measurer = createWidthMeasurer(node, candidate.letterSpacing);
+            try {
+              const candidateText = hyphenateRussianTextWithVisibleDash(
+                preparedText,
+                node.width,
+                measurer.measure,
+                settings
+              );
+              const breakCount = countInsertedBreaks(candidateText);
+              const desiredPenalty = Math.abs(
+                candidate.percentValue - settings.letterSpacingDesiredPercent
+              );
+              const currentPenalty = Math.abs(
+                candidate.percentValue - currentSpacingPercent
+              );
+
+              if (
+                breakCount < bestBreakCount ||
+                (breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty) ||
+                (breakCount === bestBreakCount &&
+                  Math.abs(desiredPenalty - bestDesiredPenalty) < 0.0001 &&
+                  currentPenalty < bestCurrentPenalty)
+              ) {
+                bestBreakCount = breakCount;
+                bestDesiredPenalty = desiredPenalty;
+                bestCurrentPenalty = currentPenalty;
+                bestText = candidateText;
+                bestSpacing = candidate.letterSpacing;
+              }
+            } finally {
+              measurer.destroy();
+            }
+          }
+
+          transformed = bestText;
+          if (!sameLetterSpacing(bestSpacing, currentSpacing)) {
+            node.letterSpacing = bestSpacing;
+            hasNodeChanges = true;
+          }
+        } else {
+          const measurer = createWidthMeasurer(node);
+          try {
+            transformed = hyphenateRussianTextWithVisibleDash(
+              preparedText,
+              node.width,
+              measurer.measure,
+              settings
+            );
+          } finally {
+            measurer.destroy();
+          }
         }
       }
 
       if (transformed !== original) {
         node.characters = transformed;
+        hasNodeChanges = true;
+      }
+
+      if (hasNodeChanges) {
+        if (isResetMode) {
+          clearNodeSnapshot(node);
+        } else {
+          writeNodeSnapshot(node, original, originalLetterSpacing);
+        }
         changedNodes += 1;
       }
     } catch (error) {
       skippedNodes += 1;
+      pushSkippedReason(
+        node,
+        error instanceof Error ? error.message : "Неизвестная ошибка"
+      );
       console.error(`Не удалось обработать слой ${node.name}`, error);
     }
   }
 
+  const debug = {
+    mode,
+    totalNodes: textNodes.length,
+    changedNodes,
+    skippedNodes,
+    skippedMixedTypography,
+    skippedReasons
+  };
+
   if (isResetMode) {
-    return buildResetMessage(changedNodes, skippedNodes);
+    return {
+      ...buildResetMessage(changedNodes, skippedNodes),
+      debug
+    };
   }
 
-  return buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography);
+  return {
+    ...buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography),
+    debug
+  };
 }
 
 function postUiStatus(message, kind) {
@@ -461,6 +976,21 @@ function postUiStatus(message, kind) {
     type: "status",
     kind,
     message
+  });
+}
+
+function postUiSettings() {
+  figma.ui.postMessage({
+    type: "settings",
+    settings: runtimeSettings,
+    presets: Object.keys(TYPOGRAPHY_PRESETS)
+  });
+}
+
+function postUiDebug(debug) {
+  figma.ui.postMessage({
+    type: "debug",
+    debug
   });
 }
 
@@ -516,8 +1046,9 @@ async function runAutoRecalc() {
   suppressOwnDocumentChanges();
 
   try {
-    const result = await processTextNodes(watchedNodes, APPLY_MODE);
+    const result = await processTextNodes(watchedNodes, APPLY_MODE, runtimeSettings);
     refreshWatchedNodeWidths();
+    postUiDebug(result.debug);
 
     if (result.kind === "error") {
       postUiStatus(`Автопересчёт: ${result.text}`, "error");
@@ -527,6 +1058,7 @@ async function runAutoRecalc() {
   } catch (error) {
     console.error("Ошибка автопересчёта при изменении ширины", error);
     postUiStatus("Не удалось выполнить автопересчёт при изменении ширины.", "error");
+    postUiDebug(null);
   } finally {
     autoRecalcInProgress = false;
     suppressOwnDocumentChanges();
@@ -545,21 +1077,30 @@ async function handleAction(mode) {
   suppressOwnDocumentChanges();
   try {
     const result = await processSelection(mode);
+    postUiDebug(result.debug);
 
     if (mode === APPLY_MODE) {
       if (result.kind === "error") {
         clearWatchNodes();
         postUiStatus(result.text, result.kind);
       } else {
-        const watchedCount = enableAutoWatchFromSelection();
-        if (watchedCount > 0) {
-          postUiStatus(
-            `${result.text} Автопересчёт включён: при изменении ширины переносы обновляются автоматически.`,
-            result.kind
-          );
+        if (runtimeSettings.autoWatch) {
+          const watchedCount = enableAutoWatchFromSelection();
+          if (watchedCount > 0) {
+            postUiStatus(
+              `${result.text} Автопересчёт включён: при изменении ширины переносы обновляются автоматически.`,
+              result.kind
+            );
+          } else {
+            clearWatchNodes();
+            postUiStatus(result.text, result.kind);
+          }
         } else {
           clearWatchNodes();
-          postUiStatus(result.text, result.kind);
+          postUiStatus(
+            `${result.text} Автопересчёт выключен в настройках.`,
+            result.kind
+          );
         }
       }
     } else if (mode === RESET_MODE) {
@@ -576,6 +1117,7 @@ async function handleAction(mode) {
     const fallback = "Не удалось выполнить команду плагина.";
     figma.notify(fallback);
     postUiStatus(fallback, "error");
+    postUiDebug(null);
   } finally {
     manualActionInProgress = false;
     suppressOwnDocumentChanges();
@@ -588,16 +1130,23 @@ async function handleAction(mode) {
   }
 }
 
-function run() {
+async function run() {
   figma.showUI(__html__, {
-    width: 271,
-    height: 432,
+    width: 360,
+    height: 640,
     themeColors: false
   });
 
+  await loadRuntimeSettings();
+  postUiSettings();
+  postUiDebug(null);
   postUiStatus("Выделите текст и выберите действие.", "info");
 
   figma.on("documentchange", () => {
+    if (!runtimeSettings.autoWatch) {
+      return;
+    }
+
     if (watchedNodeIds.size === 0) {
       return;
     }
@@ -631,10 +1180,39 @@ function run() {
       return;
     }
 
+    if (message.type === "request-settings") {
+      postUiSettings();
+      return;
+    }
+
+    if (message.type === "select-preset") {
+      const preset = getPresetSettings(message.preset);
+      if (!preset) {
+        postUiStatus("Неизвестный пресет типографики.", "error");
+        return;
+      }
+      runtimeSettings = preset;
+      await persistRuntimeSettings();
+      postUiSettings();
+      postUiStatus(`Применён пресет: ${message.preset}.`, "info");
+      return;
+    }
+
+    if (message.type === "save-settings") {
+      runtimeSettings = normalizeSettings({
+        ...runtimeSettings,
+        ...message.settings,
+        preset: CUSTOM_PRESET
+      });
+      await persistRuntimeSettings();
+      postUiSettings();
+      return;
+    }
+
     if (message.type === APPLY_MODE || message.type === RESET_MODE) {
       await handleAction(message.type);
     }
   };
 }
 
-run();
+void run();
