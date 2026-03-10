@@ -139,8 +139,16 @@
   var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
   var WIDTH_EPSILON = 0.01;
+  var AUTO_RECALC_DEBOUNCE_MS = 280;
+  var SELF_CHANGE_SUPPRESS_MS = 600;
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
+  var watchedNodeIds = /* @__PURE__ */ new Set();
+  var watchedNodeWidths = /* @__PURE__ */ new Map();
+  var autoRecalcTimer = null;
+  var autoRecalcInProgress = false;
+  var autoRecalcQueued = false;
+  var suppressDocumentChangeUntil = 0;
   function normalizeTextForRehyphenation(text) {
     return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
   }
@@ -329,6 +337,66 @@
       await figma.loadFontAsync(font);
     }
   }
+  function setWatchNodes(textNodes) {
+    watchedNodeIds = new Set(textNodes.map((node) => node.id));
+    refreshWatchedNodeWidths();
+  }
+  function clearWatchNodes() {
+    watchedNodeIds.clear();
+    watchedNodeWidths.clear();
+    autoRecalcQueued = false;
+    if (autoRecalcTimer) {
+      clearTimeout(autoRecalcTimer);
+      autoRecalcTimer = null;
+    }
+  }
+  function refreshWatchedNodeWidths() {
+    const nextIds = /* @__PURE__ */ new Set();
+    const nextWidths = /* @__PURE__ */ new Map();
+    for (const id of watchedNodeIds) {
+      const node = figma.getNodeById(id);
+      if (!node || node.type !== "TEXT") {
+        continue;
+      }
+      nextIds.add(id);
+      nextWidths.set(id, node.width);
+    }
+    watchedNodeIds = nextIds;
+    watchedNodeWidths = nextWidths;
+  }
+  function getWatchedTextNodes() {
+    const nodes = [];
+    for (const id of watchedNodeIds) {
+      const node = figma.getNodeById(id);
+      if (node && node.type === "TEXT") {
+        nodes.push(node);
+      }
+    }
+    return nodes;
+  }
+  function didWatchedWidthChange() {
+    let changed = false;
+    const nextIds = /* @__PURE__ */ new Set();
+    const nextWidths = /* @__PURE__ */ new Map();
+    for (const id of watchedNodeIds) {
+      const node = figma.getNodeById(id);
+      if (!node || node.type !== "TEXT") {
+        continue;
+      }
+      nextIds.add(id);
+      nextWidths.set(id, node.width);
+      const previousWidth = watchedNodeWidths.get(id);
+      if (previousWidth === void 0 || Math.abs(previousWidth - node.width) > WIDTH_EPSILON) {
+        changed = true;
+      }
+    }
+    watchedNodeIds = nextIds;
+    watchedNodeWidths = nextWidths;
+    return changed;
+  }
+  function suppressOwnDocumentChanges() {
+    suppressDocumentChangeUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+  }
   function buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography) {
     if (changedNodes === 0) {
       if (skippedNodes > 0) {
@@ -378,7 +446,6 @@
     };
   }
   async function processSelection(mode) {
-    const isResetMode = mode === RESET_MODE;
     const selection = figma.currentPage.selection;
     if (selection.length === 0) {
       return {
@@ -393,6 +460,10 @@
         text: "\u0412 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0438 \u043D\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0445 \u0441\u043B\u043E\u0451\u0432."
       };
     }
+    return processTextNodes(textNodes, mode);
+  }
+  async function processTextNodes(textNodes, mode) {
+    const isResetMode = mode === RESET_MODE;
     let changedNodes = 0;
     let skippedNodes = 0;
     let skippedMixedTypography = 0;
@@ -447,12 +518,91 @@
       isLoading
     });
   }
+  function enableAutoWatchFromSelection() {
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      clearWatchNodes();
+      return 0;
+    }
+    const textNodes = collectTextNodes(selection);
+    setWatchNodes(textNodes);
+    return textNodes.length;
+  }
+  function scheduleAutoRecalc() {
+    if (autoRecalcTimer) {
+      clearTimeout(autoRecalcTimer);
+    }
+    autoRecalcTimer = setTimeout(() => {
+      autoRecalcTimer = null;
+      void runAutoRecalc();
+    }, AUTO_RECALC_DEBOUNCE_MS);
+  }
+  async function runAutoRecalc() {
+    if (watchedNodeIds.size === 0) {
+      return;
+    }
+    if (autoRecalcInProgress) {
+      autoRecalcQueued = true;
+      return;
+    }
+    const watchedNodes = getWatchedTextNodes();
+    if (watchedNodes.length === 0) {
+      clearWatchNodes();
+      postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D: \u043E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u0441\u043B\u043E\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B.", "info");
+      return;
+    }
+    autoRecalcInProgress = true;
+    setUiLoading(true);
+    suppressOwnDocumentChanges();
+    try {
+      const result = await processTextNodes(watchedNodes, APPLY_MODE);
+      refreshWatchedNodeWidths();
+      if (result.kind === "error") {
+        postUiStatus(`\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442: ${result.text}`, "error");
+      } else {
+        postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D \u043F\u043E\u0441\u043B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0448\u0438\u0440\u0438\u043D\u044B.", "info");
+      }
+    } catch (error) {
+      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442\u0430 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B", error);
+      postUiStatus("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B.", "error");
+    } finally {
+      autoRecalcInProgress = false;
+      setUiLoading(false);
+      if (autoRecalcQueued) {
+        autoRecalcQueued = false;
+        scheduleAutoRecalc();
+      }
+    }
+  }
   async function handleAction(mode) {
     setUiLoading(true);
+    suppressOwnDocumentChanges();
     try {
       const result = await processSelection(mode);
+      if (mode === APPLY_MODE) {
+        if (result.kind === "error") {
+          clearWatchNodes();
+          postUiStatus(result.text, result.kind);
+        } else {
+          const watchedCount = enableAutoWatchFromSelection();
+          if (watchedCount > 0) {
+            postUiStatus(
+              `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u043A\u043B\u044E\u0447\u0451\u043D: \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.`,
+              result.kind
+            );
+          } else {
+            clearWatchNodes();
+            postUiStatus(result.text, result.kind);
+          }
+        }
+      } else if (mode === RESET_MODE) {
+        clearWatchNodes();
+        postUiStatus(`${result.text} \u0410\u0432\u0442\u043E\u0440\u0435\u0436\u0438\u043C \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D.`, result.kind);
+      } else {
+        postUiStatus(result.text, result.kind);
+      }
+      refreshWatchedNodeWidths();
       figma.notify(result.text);
-      postUiStatus(result.text, result.kind);
     } catch (error) {
       console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u0430\u043D\u0434\u044B \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
       const fallback = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u0430\u043D\u0434\u0443 \u043F\u043B\u0430\u0433\u0438\u043D\u0430.";
@@ -469,11 +619,24 @@
       themeColors: false
     });
     postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
+    figma.on("documentchange", () => {
+      if (watchedNodeIds.size === 0) {
+        return;
+      }
+      if (Date.now() < suppressDocumentChangeUntil) {
+        return;
+      }
+      if (!didWatchedWidthChange()) {
+        return;
+      }
+      scheduleAutoRecalc();
+    });
     figma.ui.onmessage = async (message) => {
       if (!message || typeof message !== "object") {
         return;
       }
       if (message.type === "close") {
+        clearWatchNodes();
         figma.closePlugin();
         return;
       }

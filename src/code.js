@@ -8,8 +8,17 @@ const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
 const WIDTH_EPSILON = 0.01;
+const AUTO_RECALC_DEBOUNCE_MS = 280;
+const SELF_CHANGE_SUPPRESS_MS = 600;
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
+
+let watchedNodeIds = new Set();
+let watchedNodeWidths = new Map();
+let autoRecalcTimer = null;
+let autoRecalcInProgress = false;
+let autoRecalcQueued = false;
+let suppressDocumentChangeUntil = 0;
 
 function normalizeTextForRehyphenation(text) {
   return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "");
@@ -239,6 +248,82 @@ async function loadFontsForNode(node) {
   }
 }
 
+function setWatchNodes(textNodes) {
+  watchedNodeIds = new Set(textNodes.map((node) => node.id));
+  refreshWatchedNodeWidths();
+}
+
+function clearWatchNodes() {
+  watchedNodeIds.clear();
+  watchedNodeWidths.clear();
+  autoRecalcQueued = false;
+  if (autoRecalcTimer) {
+    clearTimeout(autoRecalcTimer);
+    autoRecalcTimer = null;
+  }
+}
+
+function refreshWatchedNodeWidths() {
+  const nextIds = new Set();
+  const nextWidths = new Map();
+
+  for (const id of watchedNodeIds) {
+    const node = figma.getNodeById(id);
+    if (!node || node.type !== "TEXT") {
+      continue;
+    }
+    nextIds.add(id);
+    nextWidths.set(id, node.width);
+  }
+
+  watchedNodeIds = nextIds;
+  watchedNodeWidths = nextWidths;
+}
+
+function getWatchedTextNodes() {
+  const nodes = [];
+  for (const id of watchedNodeIds) {
+    const node = figma.getNodeById(id);
+    if (node && node.type === "TEXT") {
+      nodes.push(node);
+    }
+  }
+  return nodes;
+}
+
+function didWatchedWidthChange() {
+  let changed = false;
+  const nextIds = new Set();
+  const nextWidths = new Map();
+
+  for (const id of watchedNodeIds) {
+    const node = figma.getNodeById(id);
+    if (!node || node.type !== "TEXT") {
+      continue;
+    }
+
+    nextIds.add(id);
+    nextWidths.set(id, node.width);
+
+    const previousWidth = watchedNodeWidths.get(id);
+    if (
+      previousWidth === undefined ||
+      Math.abs(previousWidth - node.width) > WIDTH_EPSILON
+    ) {
+      changed = true;
+    }
+  }
+
+  watchedNodeIds = nextIds;
+  watchedNodeWidths = nextWidths;
+
+  return changed;
+}
+
+function suppressOwnDocumentChanges() {
+  suppressDocumentChangeUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
+}
+
 function buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography) {
   if (changedNodes === 0) {
     if (skippedNodes > 0) {
@@ -295,7 +380,6 @@ function buildResetMessage(changedNodes, skippedNodes) {
 }
 
 async function processSelection(mode) {
-  const isResetMode = mode === RESET_MODE;
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {
     return {
@@ -311,6 +395,12 @@ async function processSelection(mode) {
       text: "В выделении нет текстовых слоёв."
     };
   }
+
+  return processTextNodes(textNodes, mode);
+}
+
+async function processTextNodes(textNodes, mode) {
+  const isResetMode = mode === RESET_MODE;
 
   let changedNodes = 0;
   let skippedNodes = 0;
@@ -376,12 +466,104 @@ function setUiLoading(isLoading) {
   });
 }
 
+function enableAutoWatchFromSelection() {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    clearWatchNodes();
+    return 0;
+  }
+
+  const textNodes = collectTextNodes(selection);
+  setWatchNodes(textNodes);
+  return textNodes.length;
+}
+
+function scheduleAutoRecalc() {
+  if (autoRecalcTimer) {
+    clearTimeout(autoRecalcTimer);
+  }
+
+  autoRecalcTimer = setTimeout(() => {
+    autoRecalcTimer = null;
+    void runAutoRecalc();
+  }, AUTO_RECALC_DEBOUNCE_MS);
+}
+
+async function runAutoRecalc() {
+  if (watchedNodeIds.size === 0) {
+    return;
+  }
+
+  if (autoRecalcInProgress) {
+    autoRecalcQueued = true;
+    return;
+  }
+
+  const watchedNodes = getWatchedTextNodes();
+  if (watchedNodes.length === 0) {
+    clearWatchNodes();
+    postUiStatus("Автопересчёт остановлен: отслеживаемые слои не найдены.", "info");
+    return;
+  }
+
+  autoRecalcInProgress = true;
+  setUiLoading(true);
+  suppressOwnDocumentChanges();
+
+  try {
+    const result = await processTextNodes(watchedNodes, APPLY_MODE);
+    refreshWatchedNodeWidths();
+
+    if (result.kind === "error") {
+      postUiStatus(`Автопересчёт: ${result.text}`, "error");
+    } else {
+      postUiStatus("Автопересчёт выполнен после изменения ширины.", "info");
+    }
+  } catch (error) {
+    console.error("Ошибка автопересчёта при изменении ширины", error);
+    postUiStatus("Не удалось выполнить автопересчёт при изменении ширины.", "error");
+  } finally {
+    autoRecalcInProgress = false;
+    setUiLoading(false);
+
+    if (autoRecalcQueued) {
+      autoRecalcQueued = false;
+      scheduleAutoRecalc();
+    }
+  }
+}
+
 async function handleAction(mode) {
   setUiLoading(true);
+  suppressOwnDocumentChanges();
   try {
     const result = await processSelection(mode);
+
+    if (mode === APPLY_MODE) {
+      if (result.kind === "error") {
+        clearWatchNodes();
+        postUiStatus(result.text, result.kind);
+      } else {
+        const watchedCount = enableAutoWatchFromSelection();
+        if (watchedCount > 0) {
+          postUiStatus(
+            `${result.text} Автопересчёт включён: при изменении ширины переносы обновляются автоматически.`,
+            result.kind
+          );
+        } else {
+          clearWatchNodes();
+          postUiStatus(result.text, result.kind);
+        }
+      }
+    } else if (mode === RESET_MODE) {
+      clearWatchNodes();
+      postUiStatus(`${result.text} Авторежим отключён.`, result.kind);
+    } else {
+      postUiStatus(result.text, result.kind);
+    }
+
+    refreshWatchedNodeWidths();
     figma.notify(result.text);
-    postUiStatus(result.text, result.kind);
   } catch (error) {
     console.error("Ошибка выполнения команды плагина", error);
     const fallback = "Не удалось выполнить команду плагина.";
@@ -401,12 +583,29 @@ function run() {
 
   postUiStatus("Выделите текст и выберите действие.", "info");
 
+  figma.on("documentchange", () => {
+    if (watchedNodeIds.size === 0) {
+      return;
+    }
+
+    if (Date.now() < suppressDocumentChangeUntil) {
+      return;
+    }
+
+    if (!didWatchedWidthChange()) {
+      return;
+    }
+
+    scheduleAutoRecalc();
+  });
+
   figma.ui.onmessage = async (message) => {
     if (!message || typeof message !== "object") {
       return;
     }
 
     if (message.type === "close") {
+      clearWatchNodes();
       figma.closePlugin();
       return;
     }
