@@ -1,7 +1,46 @@
 (() => {
+  var __defProp = Object.defineProperty;
+  var __defProps = Object.defineProperties;
+  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __propIsEnum = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    if (__getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(b)) {
+        if (__propIsEnum.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      }
+    return a;
+  };
+  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
   var __commonJS = (cb, mod) => function __require() {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
+  var __async = (__this, __arguments, generator) => {
+    return new Promise((resolve, reject) => {
+      var fulfilled = (value) => {
+        try {
+          step(generator.next(value));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      var rejected = (value) => {
+        try {
+          step(generator.throw(value));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+      step((generator = generator.apply(__this, __arguments)).next());
+    });
   };
 
   // node_modules/hypher/lib/hypher.js
@@ -201,10 +240,9 @@
     "\u0434\u0430",
     "\u043E\u0431"
   ]);
-  var DEFAULT_SETTINGS = {
-    preset: "interface",
-    ...TYPOGRAPHY_PRESETS.interface
-  };
+  var DEFAULT_SETTINGS = __spreadValues({
+    preset: "interface"
+  }, TYPOGRAPHY_PRESETS.interface);
   var watchedNodeIds = /* @__PURE__ */ new Set();
   var watchedNodeWidths = /* @__PURE__ */ new Map();
   var autoRecalcTimer = null;
@@ -212,7 +250,7 @@
   var autoRecalcQueued = false;
   var suppressDocumentChangeUntil = 0;
   var manualActionInProgress = false;
-  var runtimeSettings = { ...DEFAULT_SETTINGS };
+  var runtimeSettings = __spreadValues({}, DEFAULT_SETTINGS);
   function clampNumber(value, minValue, maxValue) {
     if (Number.isNaN(value)) {
       return minValue;
@@ -279,30 +317,33 @@
     if (!(name in TYPOGRAPHY_PRESETS)) {
       return null;
     }
-    return normalizeSettings({
-      preset: name,
-      ...TYPOGRAPHY_PRESETS[name]
+    return normalizeSettings(__spreadValues({
+      preset: name
+    }, TYPOGRAPHY_PRESETS[name]));
+  }
+  function loadRuntimeSettings() {
+    return __async(this, null, function* () {
+      try {
+        const saved = yield figma.clientStorage.getAsync(SETTINGS_STORAGE_KEY);
+        if (!saved || typeof saved !== "object") {
+          runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
+          return;
+        }
+        runtimeSettings = normalizeSettings(saved);
+      } catch (error) {
+        console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
+        runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
+      }
     });
   }
-  async function loadRuntimeSettings() {
-    try {
-      const saved = await figma.clientStorage.getAsync(SETTINGS_STORAGE_KEY);
-      if (!saved || typeof saved !== "object") {
-        runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
-        return;
+  function persistRuntimeSettings() {
+    return __async(this, null, function* () {
+      try {
+        yield figma.clientStorage.setAsync(SETTINGS_STORAGE_KEY, runtimeSettings);
+      } catch (error) {
+        console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
       }
-      runtimeSettings = normalizeSettings(saved);
-    } catch (error) {
-      console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
-      runtimeSettings = normalizeSettings(DEFAULT_SETTINGS);
-    }
-  }
-  async function persistRuntimeSettings() {
-    try {
-      await figma.clientStorage.setAsync(SETTINGS_STORAGE_KEY, runtimeSettings);
-    } catch (error) {
-      console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
-    }
+    });
   }
   function normalizeTextForRehyphenation(text) {
     return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
@@ -672,18 +713,20 @@
     }
     return textNodes;
   }
-  async function loadFontsForNode(node) {
-    if (!node.characters || node.characters.length === 0) {
-      return;
-    }
-    const fonts = node.getRangeAllFontNames(0, node.characters.length);
-    const uniqueFonts = /* @__PURE__ */ new Map();
-    for (const font of fonts) {
-      uniqueFonts.set(`${font.family}__${font.style}`, font);
-    }
-    for (const font of uniqueFonts.values()) {
-      await figma.loadFontAsync(font);
-    }
+  function loadFontsForNode(node) {
+    return __async(this, null, function* () {
+      if (!node.characters || node.characters.length === 0) {
+        return;
+      }
+      const fonts = node.getRangeAllFontNames(0, node.characters.length);
+      const uniqueFonts = /* @__PURE__ */ new Map();
+      for (const font of fonts) {
+        uniqueFonts.set(`${font.family}__${font.style}`, font);
+      }
+      for (const font of uniqueFonts.values()) {
+        yield figma.loadFontAsync(font);
+      }
+    });
   }
   function setWatchNodes(textNodes) {
     watchedNodeIds = new Set(textNodes.map((node) => node.id));
@@ -797,157 +840,159 @@
       text: `\u0413\u043E\u0442\u043E\u0432\u043E: \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u0432 ${changedNodes} \u0441\u043B\u043E\u0451\u0432${skippedMessage}.`
     };
   }
-  async function processSelection(mode) {
-    const selection = figma.currentPage.selection;
-    if (selection.length === 0) {
-      return {
-        kind: "error",
-        text: "\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0439 \u0441\u043B\u043E\u0439 \u0438\u043B\u0438 \u0433\u0440\u0443\u043F\u043F\u0443 \u0441 \u0442\u0435\u043A\u0441\u0442\u043E\u043C.",
-        debug: null
-      };
-    }
-    const textNodes = collectTextNodes(selection);
-    if (textNodes.length === 0) {
-      return {
-        kind: "error",
-        text: "\u0412 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0438 \u043D\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0445 \u0441\u043B\u043E\u0451\u0432.",
-        debug: null
-      };
-    }
-    return processTextNodes(textNodes, mode, runtimeSettings);
-  }
-  async function processTextNodes(textNodes, mode, settings) {
-    const isResetMode = mode === RESET_MODE;
-    let changedNodes = 0;
-    let skippedNodes = 0;
-    let skippedMixedTypography = 0;
-    const skippedReasons = [];
-    function pushSkippedReason(node, reason) {
-      if (skippedReasons.length >= 80) {
-        return;
+  function processSelection(mode) {
+    return __async(this, null, function* () {
+      const selection = figma.currentPage.selection;
+      if (selection.length === 0) {
+        return {
+          kind: "error",
+          text: "\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0439 \u0441\u043B\u043E\u0439 \u0438\u043B\u0438 \u0433\u0440\u0443\u043F\u043F\u0443 \u0441 \u0442\u0435\u043A\u0441\u0442\u043E\u043C.",
+          debug: null
+        };
       }
-      skippedReasons.push({
-        nodeId: node.id,
-        nodeName: node.name,
-        reason
-      });
-    }
-    for (const node of textNodes) {
-      try {
-        await loadFontsForNode(node);
-        const original = node.characters;
-        const originalLetterSpacing = getNodeLetterSpacing(node);
-        let transformed = original;
-        let hasNodeChanges = false;
-        if (isResetMode) {
-          if (restoreFromSnapshot(node)) {
-            changedNodes += 1;
-            continue;
-          }
-          transformed = resetHyphenationText(original);
-        } else {
-          if (hasMixedTypography(node)) {
-            skippedNodes += 1;
-            skippedMixedTypography += 1;
-            pushSkippedReason(node, "\u0421\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430");
-            continue;
-          }
-          const normalized = normalizeTextForRehyphenation(original);
-          const preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
-          if (settings.optimizeLetterSpacing) {
-            const currentSpacing = getNodeLetterSpacing(node);
-            const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
-            const candidates = getLetterSpacingCandidates(node, settings);
-            let bestText = preparedText;
-            let bestSpacing = currentSpacing;
-            let bestBreakCount = Number.POSITIVE_INFINITY;
-            let bestDesiredPenalty = Number.POSITIVE_INFINITY;
-            let bestCurrentPenalty = Number.POSITIVE_INFINITY;
-            for (const candidate of candidates) {
-              const measurer = createWidthMeasurer(node, candidate.letterSpacing);
+      const textNodes = collectTextNodes(selection);
+      if (textNodes.length === 0) {
+        return {
+          kind: "error",
+          text: "\u0412 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0438 \u043D\u0435\u0442 \u0442\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0445 \u0441\u043B\u043E\u0451\u0432.",
+          debug: null
+        };
+      }
+      return processTextNodes(textNodes, mode, runtimeSettings);
+    });
+  }
+  function processTextNodes(textNodes, mode, settings) {
+    return __async(this, null, function* () {
+      const isResetMode = mode === RESET_MODE;
+      let changedNodes = 0;
+      let skippedNodes = 0;
+      let skippedMixedTypography = 0;
+      const skippedReasons = [];
+      function pushSkippedReason(node, reason) {
+        if (skippedReasons.length >= 80) {
+          return;
+        }
+        skippedReasons.push({
+          nodeId: node.id,
+          nodeName: node.name,
+          reason
+        });
+      }
+      for (const node of textNodes) {
+        try {
+          yield loadFontsForNode(node);
+          const original = node.characters;
+          const originalLetterSpacing = getNodeLetterSpacing(node);
+          let transformed = original;
+          let hasNodeChanges = false;
+          if (isResetMode) {
+            if (restoreFromSnapshot(node)) {
+              changedNodes += 1;
+              continue;
+            }
+            transformed = resetHyphenationText(original);
+          } else {
+            if (hasMixedTypography(node)) {
+              skippedNodes += 1;
+              skippedMixedTypography += 1;
+              pushSkippedReason(node, "\u0421\u043C\u0435\u0448\u0430\u043D\u043D\u0430\u044F \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0430");
+              continue;
+            }
+            const normalized = normalizeTextForRehyphenation(original);
+            const preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
+            if (settings.optimizeLetterSpacing) {
+              const currentSpacing = getNodeLetterSpacing(node);
+              const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
+              const candidates = getLetterSpacingCandidates(node, settings);
+              let bestText = preparedText;
+              let bestSpacing = currentSpacing;
+              let bestBreakCount = Number.POSITIVE_INFINITY;
+              let bestDesiredPenalty = Number.POSITIVE_INFINITY;
+              let bestCurrentPenalty = Number.POSITIVE_INFINITY;
+              for (const candidate of candidates) {
+                const measurer = createWidthMeasurer(node, candidate.letterSpacing);
+                try {
+                  const candidateText = hyphenateRussianTextWithVisibleDash(
+                    preparedText,
+                    node.width,
+                    measurer.measure,
+                    settings
+                  );
+                  const breakCount = countInsertedBreaks(candidateText);
+                  const desiredPenalty = Math.abs(
+                    candidate.percentValue - settings.letterSpacingDesiredPercent
+                  );
+                  const currentPenalty = Math.abs(
+                    candidate.percentValue - currentSpacingPercent
+                  );
+                  if (breakCount < bestBreakCount || breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty) {
+                    bestBreakCount = breakCount;
+                    bestDesiredPenalty = desiredPenalty;
+                    bestCurrentPenalty = currentPenalty;
+                    bestText = candidateText;
+                    bestSpacing = candidate.letterSpacing;
+                  }
+                } finally {
+                  measurer.destroy();
+                }
+              }
+              transformed = bestText;
+              if (!sameLetterSpacing(bestSpacing, currentSpacing)) {
+                node.letterSpacing = bestSpacing;
+                hasNodeChanges = true;
+              }
+            } else {
+              const measurer = createWidthMeasurer(node);
               try {
-                const candidateText = hyphenateRussianTextWithVisibleDash(
+                transformed = hyphenateRussianTextWithVisibleDash(
                   preparedText,
                   node.width,
                   measurer.measure,
                   settings
                 );
-                const breakCount = countInsertedBreaks(candidateText);
-                const desiredPenalty = Math.abs(
-                  candidate.percentValue - settings.letterSpacingDesiredPercent
-                );
-                const currentPenalty = Math.abs(
-                  candidate.percentValue - currentSpacingPercent
-                );
-                if (breakCount < bestBreakCount || breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty) {
-                  bestBreakCount = breakCount;
-                  bestDesiredPenalty = desiredPenalty;
-                  bestCurrentPenalty = currentPenalty;
-                  bestText = candidateText;
-                  bestSpacing = candidate.letterSpacing;
-                }
               } finally {
                 measurer.destroy();
               }
             }
-            transformed = bestText;
-            if (!sameLetterSpacing(bestSpacing, currentSpacing)) {
-              node.letterSpacing = bestSpacing;
-              hasNodeChanges = true;
-            }
-          } else {
-            const measurer = createWidthMeasurer(node);
-            try {
-              transformed = hyphenateRussianTextWithVisibleDash(
-                preparedText,
-                node.width,
-                measurer.measure,
-                settings
-              );
-            } finally {
-              measurer.destroy();
-            }
           }
-        }
-        if (transformed !== original) {
-          node.characters = transformed;
-          hasNodeChanges = true;
-        }
-        if (hasNodeChanges) {
-          if (isResetMode) {
-            clearNodeSnapshot(node);
-          } else {
-            writeNodeSnapshot(node, original, originalLetterSpacing);
+          if (transformed !== original) {
+            node.characters = transformed;
+            hasNodeChanges = true;
           }
-          changedNodes += 1;
+          if (hasNodeChanges) {
+            if (isResetMode) {
+              clearNodeSnapshot(node);
+            } else {
+              writeNodeSnapshot(node, original, originalLetterSpacing);
+            }
+            changedNodes += 1;
+          }
+        } catch (error) {
+          skippedNodes += 1;
+          pushSkippedReason(
+            node,
+            error instanceof Error ? error.message : "\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"
+          );
+          console.error(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u0441\u043B\u043E\u0439 ${node.name}`, error);
         }
-      } catch (error) {
-        skippedNodes += 1;
-        pushSkippedReason(
-          node,
-          error instanceof Error ? error.message : "\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"
-        );
-        console.error(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u0441\u043B\u043E\u0439 ${node.name}`, error);
       }
-    }
-    const debug = {
-      mode,
-      totalNodes: textNodes.length,
-      changedNodes,
-      skippedNodes,
-      skippedMixedTypography,
-      skippedReasons
-    };
-    if (isResetMode) {
-      return {
-        ...buildResetMessage(changedNodes, skippedNodes),
-        debug
+      const debug = {
+        mode,
+        totalNodes: textNodes.length,
+        changedNodes,
+        skippedNodes,
+        skippedMixedTypography,
+        skippedReasons
       };
-    }
-    return {
-      ...buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography),
-      debug
-    };
+      if (isResetMode) {
+        return __spreadProps(__spreadValues({}, buildResetMessage(changedNodes, skippedNodes)), {
+          debug
+        });
+      }
+      return __spreadProps(__spreadValues({}, buildApplyMessage(changedNodes, skippedNodes, skippedMixedTypography)), {
+        debug
+      });
+    });
   }
   function postUiStatus(message, kind) {
     figma.ui.postMessage({
@@ -994,171 +1039,175 @@
       void runAutoRecalc();
     }, AUTO_RECALC_DEBOUNCE_MS);
   }
-  async function runAutoRecalc() {
-    if (watchedNodeIds.size === 0) {
-      return;
-    }
-    if (autoRecalcInProgress) {
-      autoRecalcQueued = true;
-      return;
-    }
-    const watchedNodes = getWatchedTextNodes();
-    if (watchedNodes.length === 0) {
-      clearWatchNodes();
-      postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D: \u043E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u0441\u043B\u043E\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B.", "info");
-      return;
-    }
-    autoRecalcInProgress = true;
-    setUiLoading(true);
-    suppressOwnDocumentChanges();
-    try {
-      const result = await processTextNodes(watchedNodes, APPLY_MODE, runtimeSettings);
-      refreshWatchedNodeWidths();
-      postUiDebug(result.debug);
-      if (result.kind === "error") {
-        postUiStatus(`\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442: ${result.text}`, "error");
-      } else {
-        postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D \u043F\u043E\u0441\u043B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0448\u0438\u0440\u0438\u043D\u044B.", "info");
-      }
-    } catch (error) {
-      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442\u0430 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B", error);
-      postUiStatus("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B.", "error");
-      postUiDebug(null);
-    } finally {
-      autoRecalcInProgress = false;
-      suppressOwnDocumentChanges();
-      setUiLoading(false);
-      if (autoRecalcQueued) {
-        autoRecalcQueued = false;
-        scheduleAutoRecalc();
-      }
-    }
-  }
-  async function handleAction(mode) {
-    manualActionInProgress = true;
-    setUiLoading(true);
-    suppressOwnDocumentChanges();
-    try {
-      const result = await processSelection(mode);
-      postUiDebug(result.debug);
-      if (mode === APPLY_MODE) {
-        if (result.kind === "error") {
-          clearWatchNodes();
-          postUiStatus(result.text, result.kind);
-        } else {
-          if (runtimeSettings.autoWatch) {
-            const watchedCount = enableAutoWatchFromSelection();
-            if (watchedCount > 0) {
-              postUiStatus(
-                `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u043A\u043B\u044E\u0447\u0451\u043D: \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.`,
-                result.kind
-              );
-            } else {
-              clearWatchNodes();
-              postUiStatus(result.text, result.kind);
-            }
-          } else {
-            clearWatchNodes();
-            postUiStatus(
-              `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445.`,
-              result.kind
-            );
-          }
-        }
-      } else if (mode === RESET_MODE) {
-        clearWatchNodes();
-        postUiStatus(`${result.text} \u0410\u0432\u0442\u043E\u0440\u0435\u0436\u0438\u043C \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D.`, result.kind);
-      } else {
-        postUiStatus(result.text, result.kind);
-      }
-      refreshWatchedNodeWidths();
-      figma.notify(result.text);
-    } catch (error) {
-      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u0430\u043D\u0434\u044B \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
-      const fallback = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u0430\u043D\u0434\u0443 \u043F\u043B\u0430\u0433\u0438\u043D\u0430.";
-      figma.notify(fallback);
-      postUiStatus(fallback, "error");
-      postUiDebug(null);
-    } finally {
-      manualActionInProgress = false;
-      suppressOwnDocumentChanges();
-      setUiLoading(false);
-      if (autoRecalcQueued && watchedNodeIds.size > 0) {
-        autoRecalcQueued = false;
-        scheduleAutoRecalc();
-      }
-    }
-  }
-  async function run() {
-    figma.showUI(__html__, {
-      width: 360,
-      height: 640,
-      themeColors: false
-    });
-    await loadRuntimeSettings();
-    postUiSettings();
-    postUiDebug(null);
-    postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
-    figma.on("documentchange", () => {
-      if (!runtimeSettings.autoWatch) {
-        return;
-      }
+  function runAutoRecalc() {
+    return __async(this, null, function* () {
       if (watchedNodeIds.size === 0) {
         return;
       }
-      if (Date.now() < suppressDocumentChangeUntil) {
+      if (autoRecalcInProgress) {
+        autoRecalcQueued = true;
         return;
       }
-      if (manualActionInProgress || autoRecalcInProgress) {
-        if (didWatchedWidthChange()) {
-          autoRecalcQueued = true;
-        }
-        return;
-      }
-      if (!didWatchedWidthChange()) {
-        return;
-      }
-      scheduleAutoRecalc();
-    });
-    figma.ui.onmessage = async (message) => {
-      if (!message || typeof message !== "object") {
-        return;
-      }
-      if (message.type === "close") {
+      const watchedNodes = getWatchedTextNodes();
+      if (watchedNodes.length === 0) {
         clearWatchNodes();
-        figma.closePlugin();
+        postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D: \u043E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u0441\u043B\u043E\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B.", "info");
         return;
       }
-      if (message.type === "request-settings") {
-        postUiSettings();
-        return;
+      autoRecalcInProgress = true;
+      setUiLoading(true);
+      suppressOwnDocumentChanges();
+      try {
+        const result = yield processTextNodes(watchedNodes, APPLY_MODE, runtimeSettings);
+        refreshWatchedNodeWidths();
+        postUiDebug(result.debug);
+        if (result.kind === "error") {
+          postUiStatus(`\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442: ${result.text}`, "error");
+        } else {
+          postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D \u043F\u043E\u0441\u043B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0448\u0438\u0440\u0438\u043D\u044B.", "info");
+        }
+      } catch (error) {
+        console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442\u0430 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B", error);
+        postUiStatus("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B.", "error");
+        postUiDebug(null);
+      } finally {
+        autoRecalcInProgress = false;
+        suppressOwnDocumentChanges();
+        setUiLoading(false);
+        if (autoRecalcQueued) {
+          autoRecalcQueued = false;
+          scheduleAutoRecalc();
+        }
       }
-      if (message.type === "select-preset") {
-        const preset = getPresetSettings(message.preset);
-        if (!preset) {
-          postUiStatus("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0438.", "error");
+    });
+  }
+  function handleAction(mode) {
+    return __async(this, null, function* () {
+      manualActionInProgress = true;
+      setUiLoading(true);
+      suppressOwnDocumentChanges();
+      try {
+        const result = yield processSelection(mode);
+        postUiDebug(result.debug);
+        if (mode === APPLY_MODE) {
+          if (result.kind === "error") {
+            clearWatchNodes();
+            postUiStatus(result.text, result.kind);
+          } else {
+            if (runtimeSettings.autoWatch) {
+              const watchedCount = enableAutoWatchFromSelection();
+              if (watchedCount > 0) {
+                postUiStatus(
+                  `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u043A\u043B\u044E\u0447\u0451\u043D: \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.`,
+                  result.kind
+                );
+              } else {
+                clearWatchNodes();
+                postUiStatus(result.text, result.kind);
+              }
+            } else {
+              clearWatchNodes();
+              postUiStatus(
+                `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445.`,
+                result.kind
+              );
+            }
+          }
+        } else if (mode === RESET_MODE) {
+          clearWatchNodes();
+          postUiStatus(`${result.text} \u0410\u0432\u0442\u043E\u0440\u0435\u0436\u0438\u043C \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D.`, result.kind);
+        } else {
+          postUiStatus(result.text, result.kind);
+        }
+        refreshWatchedNodeWidths();
+        figma.notify(result.text);
+      } catch (error) {
+        console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u0430\u043D\u0434\u044B \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
+        const fallback = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u0430\u043D\u0434\u0443 \u043F\u043B\u0430\u0433\u0438\u043D\u0430.";
+        figma.notify(fallback);
+        postUiStatus(fallback, "error");
+        postUiDebug(null);
+      } finally {
+        manualActionInProgress = false;
+        suppressOwnDocumentChanges();
+        setUiLoading(false);
+        if (autoRecalcQueued && watchedNodeIds.size > 0) {
+          autoRecalcQueued = false;
+          scheduleAutoRecalc();
+        }
+      }
+    });
+  }
+  function run() {
+    return __async(this, null, function* () {
+      figma.showUI(__html__, {
+        width: 360,
+        height: 640,
+        themeColors: false
+      });
+      yield loadRuntimeSettings();
+      postUiSettings();
+      postUiDebug(null);
+      postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
+      figma.on("documentchange", () => {
+        if (!runtimeSettings.autoWatch) {
           return;
         }
-        runtimeSettings = preset;
-        await persistRuntimeSettings();
-        postUiSettings();
-        postUiStatus(`\u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D \u043F\u0440\u0435\u0441\u0435\u0442: ${message.preset}.`, "info");
-        return;
-      }
-      if (message.type === "save-settings") {
-        runtimeSettings = normalizeSettings({
-          ...runtimeSettings,
-          ...message.settings,
-          preset: CUSTOM_PRESET
-        });
-        await persistRuntimeSettings();
-        postUiSettings();
-        return;
-      }
-      if (message.type === APPLY_MODE || message.type === RESET_MODE) {
-        await handleAction(message.type);
-      }
-    };
+        if (watchedNodeIds.size === 0) {
+          return;
+        }
+        if (Date.now() < suppressDocumentChangeUntil) {
+          return;
+        }
+        if (manualActionInProgress || autoRecalcInProgress) {
+          if (didWatchedWidthChange()) {
+            autoRecalcQueued = true;
+          }
+          return;
+        }
+        if (!didWatchedWidthChange()) {
+          return;
+        }
+        scheduleAutoRecalc();
+      });
+      figma.ui.onmessage = (message) => __async(null, null, function* () {
+        if (!message || typeof message !== "object") {
+          return;
+        }
+        if (message.type === "close") {
+          clearWatchNodes();
+          figma.closePlugin();
+          return;
+        }
+        if (message.type === "request-settings") {
+          postUiSettings();
+          return;
+        }
+        if (message.type === "select-preset") {
+          const preset = getPresetSettings(message.preset);
+          if (!preset) {
+            postUiStatus("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0438.", "error");
+            return;
+          }
+          runtimeSettings = preset;
+          yield persistRuntimeSettings();
+          postUiSettings();
+          postUiStatus(`\u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D \u043F\u0440\u0435\u0441\u0435\u0442: ${message.preset}.`, "info");
+          return;
+        }
+        if (message.type === "save-settings") {
+          runtimeSettings = normalizeSettings(__spreadProps(__spreadValues(__spreadValues({}, runtimeSettings), message.settings), {
+            preset: CUSTOM_PRESET
+          }));
+          yield persistRuntimeSettings();
+          postUiSettings();
+          return;
+        }
+        if (message.type === APPLY_MODE || message.type === RESET_MODE) {
+          yield handleAction(message.type);
+        }
+      });
+    });
   }
   void run();
 })();

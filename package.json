@@ -8,7 +8,7 @@
     "hypher": "^0.2.5"
   },
   "scripts": {
-    "build": "esbuild src/code.js --bundle --platform=browser --format=iife --target=es2018 --outfile=code.js"
+    "build": "esbuild src/code.js --bundle --platform=browser --format=iife --target=es2016 --outfile=code.js"
   },
   "repository": {
     "type": "git",
