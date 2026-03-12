@@ -1140,11 +1140,17 @@
   }
   function run() {
     return __async(this, null, function* () {
-      figma.showUI(__html__, {
-        width: 360,
-        height: 640,
-        themeColors: false
-      });
+      try {
+        figma.showUI(__html__, {
+          width: 360,
+          height: 560,
+          themeColors: false
+        });
+      } catch (error) {
+        console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
+        figma.notify("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430.");
+        return;
+      }
       yield loadRuntimeSettings();
       postUiSettings();
       postUiDebug(null);
@@ -1209,5 +1215,8 @@
       });
     });
   }
-  void run();
+  void run().catch((error) => {
+    console.error("\u041A\u0440\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0443\u0441\u043A\u0430 \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
+    figma.notify("\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0443\u0441\u043A\u0430 \u043F\u043B\u0430\u0433\u0438\u043D\u0430.");
+  });
 })();

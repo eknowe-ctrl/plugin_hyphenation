@@ -1131,11 +1131,17 @@ async function handleAction(mode) {
 }
 
 async function run() {
-  figma.showUI(__html__, {
-    width: 360,
-    height: 640,
-    themeColors: false
-  });
+  try {
+    figma.showUI(__html__, {
+      width: 360,
+      height: 560,
+      themeColors: false
+    });
+  } catch (error) {
+    console.error("Не удалось открыть UI плагина", error);
+    figma.notify("Не удалось открыть UI плагина.");
+    return;
+  }
 
   await loadRuntimeSettings();
   postUiSettings();
@@ -1215,4 +1221,7 @@ async function run() {
   };
 }
 
-void run();
+void run().catch((error) => {
+  console.error("Критическая ошибка запуска плагина", error);
+  figma.notify("Ошибка запуска плагина.");
+});
