@@ -201,6 +201,10 @@
           <div class="row">
             <label><input type="checkbox" id="optimizeLetterSpacing" /> Оптимизация letter spacing</label>
           </div>
+          <div class="row">
+            <label><input type="checkbox" id="experimentalWordSpacingEnabled" /> Experimental: размер пробелов</label>
+            <input id="wsPercent" type="number" min="85" max="135" step="1" />
+          </div>
         </section>
 
         <section class="section">
@@ -255,6 +259,8 @@
         preventOrphans: document.getElementById("preventOrphans"),
         hangingHyphen: document.getElementById("hangingHyphen"),
         optimizeLetterSpacing: document.getElementById("optimizeLetterSpacing"),
+        experimentalWordSpacingEnabled: document.getElementById("experimentalWordSpacingEnabled"),
+        experimentalWordSpacingPercent: document.getElementById("wsPercent"),
         letterSpacingMinPercent: document.getElementById("lsMin"),
         letterSpacingDesiredPercent: document.getElementById("lsDesired"),
         letterSpacingMaxPercent: document.getElementById("lsMax"),
@@ -288,6 +294,13 @@
         fields.preventOrphans.checked = Boolean(settings.preventOrphans);
         fields.hangingHyphen.checked = Boolean(settings.hangingHyphen);
         fields.optimizeLetterSpacing.checked = Boolean(settings.optimizeLetterSpacing);
+        fields.experimentalWordSpacingEnabled.checked = Boolean(
+          settings.experimentalWordSpacingEnabled
+        );
+        setNumeric(
+          fields.experimentalWordSpacingPercent,
+          Number(settings.experimentalWordSpacingPercent)
+        );
         setNumeric(fields.letterSpacingMinPercent, Number(settings.letterSpacingMinPercent));
         setNumeric(fields.letterSpacingDesiredPercent, Number(settings.letterSpacingDesiredPercent));
         setNumeric(fields.letterSpacingMaxPercent, Number(settings.letterSpacingMaxPercent));
@@ -300,6 +313,8 @@
           preventOrphans: fields.preventOrphans.checked,
           hangingHyphen: fields.hangingHyphen.checked,
           optimizeLetterSpacing: fields.optimizeLetterSpacing.checked,
+          experimentalWordSpacingEnabled: fields.experimentalWordSpacingEnabled.checked,
+          experimentalWordSpacingPercent: Number(fields.experimentalWordSpacingPercent.value),
           letterSpacingMinPercent: Number(fields.letterSpacingMinPercent.value),
           letterSpacingDesiredPercent: Number(fields.letterSpacingDesiredPercent.value),
           letterSpacingMaxPercent: Number(fields.letterSpacingMaxPercent.value),

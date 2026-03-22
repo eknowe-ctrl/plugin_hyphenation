@@ -7,6 +7,7 @@ const hypher = new Hypher(russianPatterns);
 const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
+const EXPERIMENTAL_SPACE_REGEX = /[\u200A\u2009\u2004\u2002\u2003]/g;
 const WIDTH_EPSILON = 0.01;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
@@ -23,6 +24,8 @@ const TYPOGRAPHY_PRESETS = {
     preventOrphans: true,
     hangingHyphen: true,
     optimizeLetterSpacing: true,
+    experimentalWordSpacingEnabled: false,
+    experimentalWordSpacingPercent: 100,
     letterSpacingMinPercent: -3,
     letterSpacingDesiredPercent: 0,
     letterSpacingMaxPercent: 3,
@@ -33,6 +36,8 @@ const TYPOGRAPHY_PRESETS = {
     preventOrphans: true,
     hangingHyphen: false,
     optimizeLetterSpacing: true,
+    experimentalWordSpacingEnabled: false,
+    experimentalWordSpacingPercent: 100,
     letterSpacingMinPercent: -1,
     letterSpacingDesiredPercent: 0,
     letterSpacingMaxPercent: 1,
@@ -43,6 +48,8 @@ const TYPOGRAPHY_PRESETS = {
     preventOrphans: true,
     hangingHyphen: true,
     optimizeLetterSpacing: true,
+    experimentalWordSpacingEnabled: false,
+    experimentalWordSpacingPercent: 100,
     letterSpacingMinPercent: -4,
     letterSpacingDesiredPercent: -1,
     letterSpacingMaxPercent: 2,
@@ -129,6 +136,18 @@ function normalizeSettings(input) {
     typeof source.optimizeLetterSpacing === "boolean"
       ? source.optimizeLetterSpacing
       : fallbackProfile.optimizeLetterSpacing;
+  const experimentalWordSpacingEnabled =
+    typeof source.experimentalWordSpacingEnabled === "boolean"
+      ? source.experimentalWordSpacingEnabled
+      : fallbackProfile.experimentalWordSpacingEnabled;
+  const experimentalWordSpacingPercent = clampNumber(
+    Number(
+      source.experimentalWordSpacingPercent ??
+        fallbackProfile.experimentalWordSpacingPercent
+    ),
+    85,
+    135
+  );
 
   const minPercent = clampNumber(
     Number(source.letterSpacingMinPercent ?? fallbackProfile.letterSpacingMinPercent),
@@ -165,6 +184,8 @@ function normalizeSettings(input) {
     preventOrphans,
     hangingHyphen,
     optimizeLetterSpacing,
+    experimentalWordSpacingEnabled,
+    experimentalWordSpacingPercent,
     letterSpacingMinPercent: sortedMin,
     letterSpacingDesiredPercent: sortedDesired,
     letterSpacingMaxPercent: sortedMax,
@@ -209,8 +230,39 @@ function normalizeTextForRehyphenation(text) {
   return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
 }
 
+function normalizeExperimentalWordSpacing(text) {
+  return text.replace(EXPERIMENTAL_SPACE_REGEX, " ");
+}
+
+function getExperimentalSpaceCharacter(percent) {
+  if (percent <= 88) {
+    return "\u200A"; // hair space
+  }
+  if (percent <= 96) {
+    return "\u2009"; // thin space
+  }
+  if (percent <= 104) {
+    return " ";
+  }
+  if (percent <= 116) {
+    return "\u2004"; // three-per-em space
+  }
+  if (percent <= 128) {
+    return "\u2002"; // en space
+  }
+  return "\u2003"; // em space
+}
+
+function applyExperimentalWordSpacing(text, percent) {
+  const replacement = getExperimentalSpaceCharacter(percent);
+  if (replacement === " ") {
+    return text;
+  }
+  return text.replace(/ +/g, (spaces) => replacement.repeat(spaces.length));
+}
+
 function resetHyphenationText(text) {
-  return normalizeTextForRehyphenation(text).replace(
+  return normalizeExperimentalWordSpacing(normalizeTextForRehyphenation(text)).replace(
     /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
     (match, prefix, word) => {
       if (!ORPHAN_WORDS.has(word.toLowerCase())) {
@@ -894,10 +946,21 @@ async function processTextNodes(textNodes, mode, settings) {
       } else {
         const mixedTypography = hasMixedTypography(node);
 
-        const normalized = normalizeTextForRehyphenation(original);
-        const preparedText = settings.preventOrphans
+        let normalized = normalizeTextForRehyphenation(original);
+        if (settings.experimentalWordSpacingEnabled) {
+          normalized = normalizeExperimentalWordSpacing(normalized);
+        }
+
+        let preparedText = settings.preventOrphans
           ? preventRussianOrphans(normalized)
           : normalized;
+
+        if (settings.experimentalWordSpacingEnabled) {
+          preparedText = applyExperimentalWordSpacing(
+            preparedText,
+            settings.experimentalWordSpacingPercent
+          );
+        }
 
         if (settings.optimizeLetterSpacing && !mixedTypography) {
           const currentSpacing = getNodeLetterSpacing(node);
