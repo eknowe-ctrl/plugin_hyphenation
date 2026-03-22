@@ -574,7 +574,51 @@ function hasMixedTypography(node) {
   return props.some((value) => value === figma.mixed);
 }
 
+function createCloneWidthMeasurer(node, letterSpacing) {
+  const probe = node.clone();
+  probe.visible = false;
+  probe.x = -100000;
+  probe.y = -100000;
+  probe.textAutoResize = "WIDTH_AND_HEIGHT";
+
+  if (letterSpacing) {
+    try {
+      probe.letterSpacing = letterSpacing;
+    } catch (error) {
+      // Для смешанной типографики не всегда можно выставить единый letter spacing.
+    }
+  }
+
+  const cache = new Map();
+  const measure = (text) => {
+    if (!text || text.length === 0) {
+      return 0;
+    }
+
+    const cached = cache.get(text);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    probe.characters = text;
+    const width = probe.width;
+    cache.set(text, width);
+    return width;
+  };
+
+  return {
+    measure,
+    destroy() {
+      probe.remove();
+    }
+  };
+}
+
 function createWidthMeasurer(node, letterSpacing) {
+  if (hasMixedTypography(node)) {
+    return createCloneWidthMeasurer(node, letterSpacing);
+  }
+
   const probe = figma.createText();
   probe.visible = false;
   probe.x = -100000;
@@ -848,19 +892,14 @@ async function processTextNodes(textNodes, mode, settings) {
         }
         transformed = resetHyphenationText(original);
       } else {
-        if (hasMixedTypography(node)) {
-          skippedNodes += 1;
-          skippedMixedTypography += 1;
-          pushSkippedReason(node, "Смешанная типографика");
-          continue;
-        }
+        const mixedTypography = hasMixedTypography(node);
 
         const normalized = normalizeTextForRehyphenation(original);
         const preparedText = settings.preventOrphans
           ? preventRussianOrphans(normalized)
           : normalized;
 
-        if (settings.optimizeLetterSpacing) {
+        if (settings.optimizeLetterSpacing && !mixedTypography) {
           const currentSpacing = getNodeLetterSpacing(node);
           const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
           const candidates = getLetterSpacingCandidates(node, settings);
