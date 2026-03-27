@@ -177,7 +177,11 @@
   var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
   var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
-  var EXPERIMENTAL_SPACE_REGEX = /[\u200A\u2009\u2004\u2002\u2003]/g;
+  var HYPHENATION_INTENSITY_ORDER = {
+    soft: 0,
+    normal: 1,
+    aggressive: 2
+  };
   var WIDTH_EPSILON = 0.01;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
@@ -193,8 +197,9 @@
       preventOrphans: true,
       hangingHyphen: true,
       optimizeLetterSpacing: true,
-      experimentalWordSpacingEnabled: false,
-      experimentalWordSpacingPercent: 100,
+      minWordLengthForHyphenation: 4,
+      hyphenationIntensity: "normal",
+      maxHyphensPerParagraph: 0,
       letterSpacingMinPercent: -3,
       letterSpacingDesiredPercent: 0,
       letterSpacingMaxPercent: 3,
@@ -205,8 +210,9 @@
       preventOrphans: true,
       hangingHyphen: false,
       optimizeLetterSpacing: true,
-      experimentalWordSpacingEnabled: false,
-      experimentalWordSpacingPercent: 100,
+      minWordLengthForHyphenation: 5,
+      hyphenationIntensity: "soft",
+      maxHyphensPerParagraph: 2,
       letterSpacingMinPercent: -1,
       letterSpacingDesiredPercent: 0,
       letterSpacingMaxPercent: 1,
@@ -217,8 +223,9 @@
       preventOrphans: true,
       hangingHyphen: true,
       optimizeLetterSpacing: true,
-      experimentalWordSpacingEnabled: false,
-      experimentalWordSpacingPercent: 100,
+      minWordLengthForHyphenation: 4,
+      hyphenationIntensity: "aggressive",
+      maxHyphensPerParagraph: 0,
       letterSpacingMinPercent: -4,
       letterSpacingDesiredPercent: -1,
       letterSpacingMaxPercent: 2,
@@ -274,7 +281,7 @@
     return CUSTOM_PRESET;
   }
   function normalizeSettings(input) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g;
     const source = input && typeof input === "object" ? input : {};
     const preset = normalizePresetName(source.preset || DEFAULT_SETTINGS.preset);
     const fallbackProfile = preset in TYPOGRAPHY_PRESETS ? TYPOGRAPHY_PRESETS[preset] : TYPOGRAPHY_PRESETS[DEFAULT_SETTINGS.preset];
@@ -282,33 +289,43 @@
     const preventOrphans = typeof source.preventOrphans === "boolean" ? source.preventOrphans : fallbackProfile.preventOrphans;
     const hangingHyphen = typeof source.hangingHyphen === "boolean" ? source.hangingHyphen : fallbackProfile.hangingHyphen;
     const optimizeLetterSpacing = typeof source.optimizeLetterSpacing === "boolean" ? source.optimizeLetterSpacing : fallbackProfile.optimizeLetterSpacing;
-    const experimentalWordSpacingEnabled = typeof source.experimentalWordSpacingEnabled === "boolean" ? source.experimentalWordSpacingEnabled : fallbackProfile.experimentalWordSpacingEnabled;
-    const experimentalWordSpacingPercent = clampNumber(
+    const minWordLengthForHyphenation = clampNumber(
       Number(
-        (_a = source.experimentalWordSpacingPercent) != null ? _a : fallbackProfile.experimentalWordSpacingPercent
+        (_a = source.minWordLengthForHyphenation) != null ? _a : fallbackProfile.minWordLengthForHyphenation
       ),
-      85,
-      135
+      4,
+      12
+    );
+    const hyphenationIntensityRaw = String(
+      (_b = source.hyphenationIntensity) != null ? _b : fallbackProfile.hyphenationIntensity
+    );
+    const hyphenationIntensity = hyphenationIntensityRaw === "soft" || hyphenationIntensityRaw === "normal" || hyphenationIntensityRaw === "aggressive" ? hyphenationIntensityRaw : fallbackProfile.hyphenationIntensity;
+    const maxHyphensPerParagraph = clampNumber(
+      Number(
+        (_c = source.maxHyphensPerParagraph) != null ? _c : fallbackProfile.maxHyphensPerParagraph
+      ),
+      0,
+      20
     );
     const minPercent = clampNumber(
-      Number((_b = source.letterSpacingMinPercent) != null ? _b : fallbackProfile.letterSpacingMinPercent),
+      Number((_d = source.letterSpacingMinPercent) != null ? _d : fallbackProfile.letterSpacingMinPercent),
       -10,
       10
     );
     const desiredPercent = clampNumber(
       Number(
-        (_c = source.letterSpacingDesiredPercent) != null ? _c : fallbackProfile.letterSpacingDesiredPercent
+        (_e = source.letterSpacingDesiredPercent) != null ? _e : fallbackProfile.letterSpacingDesiredPercent
       ),
       -10,
       10
     );
     const maxPercent = clampNumber(
-      Number((_d = source.letterSpacingMaxPercent) != null ? _d : fallbackProfile.letterSpacingMaxPercent),
+      Number((_f = source.letterSpacingMaxPercent) != null ? _f : fallbackProfile.letterSpacingMaxPercent),
       -10,
       10
     );
     const stepPercent = clampNumber(
-      Number((_e = source.letterSpacingStepPercent) != null ? _e : fallbackProfile.letterSpacingStepPercent),
+      Number((_g = source.letterSpacingStepPercent) != null ? _g : fallbackProfile.letterSpacingStepPercent),
       0.1,
       5
     );
@@ -321,8 +338,9 @@
       preventOrphans,
       hangingHyphen,
       optimizeLetterSpacing,
-      experimentalWordSpacingEnabled,
-      experimentalWordSpacingPercent,
+      minWordLengthForHyphenation,
+      hyphenationIntensity,
+      maxHyphensPerParagraph,
       letterSpacingMinPercent: sortedMin,
       letterSpacingDesiredPercent: sortedDesired,
       letterSpacingMaxPercent: sortedMax,
@@ -365,39 +383,8 @@
   function normalizeTextForRehyphenation(text) {
     return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
   }
-  function normalizeExperimentalWordSpacing(text) {
-    return text.replace(EXPERIMENTAL_SPACE_REGEX, " ");
-  }
-  function getExperimentalSpaceCharacter(percent) {
-    if (percent <= 88) {
-      return "\u200A";
-    }
-    if (percent <= 96) {
-      return "\u2009";
-    }
-    if (percent <= 104) {
-      return " ";
-    }
-    if (percent <= 116) {
-      return "\u2004";
-    }
-    if (percent <= 128) {
-      return "\u2002";
-    }
-    return "\u2003";
-  }
-  function applyExperimentalWordSpacing(text, percent) {
-    const replacement = getExperimentalSpaceCharacter(percent);
-    if (replacement === " ") {
-      return text;
-    }
-    return text.replace(/ +/g, (spaces) => replacement.repeat(spaces.length));
-  }
-  function isJustifiedTextNode(node) {
-    return node.textAlignHorizontal === "JUSTIFIED";
-  }
   function resetHyphenationText(text) {
-    return normalizeExperimentalWordSpacing(normalizeTextForRehyphenation(text)).replace(
+    return normalizeTextForRehyphenation(text).replace(
       /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
       (match, prefix, word) => {
         if (!ORPHAN_WORDS.has(word.toLowerCase())) {
@@ -481,6 +468,9 @@
   }
   function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
     const useHangingHyphen = Boolean(options && options.hangingHyphen);
+    const minWordLength = options && typeof options.minWordLengthForHyphenation === "number" ? options.minWordLengthForHyphenation : 4;
+    const intensity = options && typeof options.hyphenationIntensity === "string" ? options.hyphenationIntensity : "normal";
+    const minIntensityRank = intensity in HYPHENATION_INTENSITY_ORDER ? HYPHENATION_INTENSITY_ORDER[intensity] : HYPHENATION_INTENSITY_ORDER.normal;
     const match = token.match(RUSSIAN_TOKEN_REGEX);
     if (!match) {
       return null;
@@ -488,7 +478,7 @@
     const leading = match[1];
     const core = match[2];
     const trailing = match[3];
-    if (core.length < 4 || core.includes("-")) {
+    if (core.length < minWordLength || core.includes("-")) {
       return null;
     }
     const parts = hypher.hyphenate(core);
@@ -498,6 +488,11 @@
     for (let i = parts.length - 1; i >= 1; i -= 1) {
       const leftCore = parts.slice(0, i).join("");
       const rightCore = parts.slice(i).join("");
+      const shortFragment = Math.min(leftCore.length, rightCore.length);
+      const fragmentIntensityRank = shortFragment >= 3 ? HYPHENATION_INTENSITY_ORDER.soft : shortFragment === 2 ? HYPHENATION_INTENSITY_ORDER.normal : HYPHENATION_INTENSITY_ORDER.aggressive;
+      if (fragmentIntensityRank < minIntensityRank) {
+        continue;
+      }
       const leftWithDash = `${leading}${leftCore}-`;
       const leftWithoutDash = `${leading}${leftCore}`;
       const widthWithoutDash = measureWidth(leftWithoutDash);
@@ -516,80 +511,82 @@
   }
   function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
     const normalized = normalizeTextForRehyphenation(text);
-    const tokens = normalized.match(TOKEN_REGEX);
-    if (!tokens) {
-      return normalized;
-    }
-    let result = "";
-    let currentLine = "";
-    let pendingSpaces = "";
-    for (const token of tokens) {
-      if (token === "\n") {
-        result += `${pendingSpaces}
-`;
-        currentLine = "";
-        pendingSpaces = "";
-        continue;
+    const lines = normalized.split("\n");
+    const maxHyphensPerParagraph = options && typeof options.maxHyphensPerParagraph === "number" ? options.maxHyphensPerParagraph : 0;
+    const transformedLines = lines.map((line) => {
+      const tokens = line.match(TOKEN_REGEX);
+      if (!tokens) {
+        return line;
       }
-      if (SPACE_TOKEN_REGEX.test(token)) {
-        pendingSpaces += token;
-        continue;
-      }
-      result += pendingSpaces;
-      let chunk = token;
-      let linePrefix = `${currentLine}${pendingSpaces}`;
-      while (chunk.length > 0) {
-        if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
-          result += chunk;
-          currentLine = `${linePrefix}${chunk}`;
-          chunk = "";
-          break;
+      let result = "";
+      let currentLine = "";
+      let pendingSpaces = "";
+      let insertedBreaks = 0;
+      for (const token of tokens) {
+        if (SPACE_TOKEN_REGEX.test(token)) {
+          pendingSpaces += token;
+          continue;
         }
-        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
-        if (linePrefix.length > 0) {
-          const breakPoint2 = findBestBreakInToken(
+        result += pendingSpaces;
+        let chunk = token;
+        let linePrefix = `${currentLine}${pendingSpaces}`;
+        while (chunk.length > 0) {
+          if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
+            result += chunk;
+            currentLine = `${linePrefix}${chunk}`;
+            chunk = "";
+            break;
+          }
+          const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
+          const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+          if (linePrefix.length > 0) {
+            const breakPoint2 = reachedParagraphLimit ? null : findBestBreakInToken(
+              chunk,
+              remainingWidth,
+              measureWidth,
+              options
+            );
+            if (breakPoint2) {
+              result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
+              insertedBreaks += 1;
+              chunk = breakPoint2.right;
+              currentLine = "";
+              linePrefix = "";
+              continue;
+            }
+            linePrefix = "";
+            continue;
+          }
+          if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
+            result += chunk;
+            currentLine = chunk;
+            chunk = "";
+            break;
+          }
+          const breakPoint = reachedParagraphLimit ? null : findBestBreakInToken(
             chunk,
-            remainingWidth,
+            maxWidth,
             measureWidth,
             options
           );
-          if (breakPoint2) {
-            result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
-            chunk = breakPoint2.right;
+          if (breakPoint) {
+            result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
+            insertedBreaks += 1;
+            chunk = breakPoint.right;
             currentLine = "";
             linePrefix = "";
             continue;
           }
-          linePrefix = "";
-          continue;
-        }
-        if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
           result += chunk;
           currentLine = chunk;
           chunk = "";
-          break;
         }
-        const breakPoint = findBestBreakInToken(
-          chunk,
-          maxWidth,
-          measureWidth,
-          options
-        );
-        if (breakPoint) {
-          result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
-          chunk = breakPoint.right;
-          currentLine = "";
-          linePrefix = "";
-          continue;
-        }
-        result += chunk;
-        currentLine = chunk;
-        chunk = "";
+        pendingSpaces = "";
       }
-      pendingSpaces = "";
-    }
-    result += pendingSpaces;
-    return result;
+      result += pendingSpaces;
+      return result;
+    });
+    return transformedLines.join("\n");
   }
   function getNodeLetterSpacing(node) {
     const spacing = node.letterSpacing;
@@ -978,23 +975,7 @@
           } else {
             const mixedTypography = hasMixedTypography(node);
             let normalized = normalizeTextForRehyphenation(original);
-            const canApplyExperimentalWordSpacing = settings.experimentalWordSpacingEnabled && !isJustifiedTextNode(node);
-            if (settings.experimentalWordSpacingEnabled && !canApplyExperimentalWordSpacing) {
-              pushSkippedReason(
-                node,
-                "Experimental \u0440\u0430\u0437\u043C\u0435\u0440 \u043F\u0440\u043E\u0431\u0435\u043B\u043E\u0432 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D \u0434\u043B\u044F full justification (JUSTIFIED), \u0447\u0442\u043E\u0431\u044B \u043D\u0435 \u043B\u043E\u043C\u0430\u0442\u044C \u0432\u044B\u043A\u043B\u044E\u0447\u043A\u0443."
-              );
-            }
-            if (canApplyExperimentalWordSpacing) {
-              normalized = normalizeExperimentalWordSpacing(normalized);
-            }
             let preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
-            if (canApplyExperimentalWordSpacing) {
-              preparedText = applyExperimentalWordSpacing(
-                preparedText,
-                settings.experimentalWordSpacingPercent
-              );
-            }
             if (settings.optimizeLetterSpacing && !mixedTypography) {
               const currentSpacing = getNodeLetterSpacing(node);
               const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);

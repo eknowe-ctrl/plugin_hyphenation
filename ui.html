@@ -202,8 +202,20 @@
             <label><input type="checkbox" id="optimizeLetterSpacing" /> Оптимизация letter spacing</label>
           </div>
           <div class="row">
-            <label><input type="checkbox" id="experimentalWordSpacingEnabled" /> Experimental: размер пробелов</label>
-            <input id="wsPercent" type="number" min="85" max="135" step="1" />
+            <span>Hyphenation mode</span>
+            <select id="hyphenationIntensity">
+              <option value="soft">Soft</option>
+              <option value="normal">Normal</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
+          </div>
+          <div class="row">
+            <span>Min word length</span>
+            <input id="minWordLengthForHyphenation" type="number" min="4" max="12" step="1" />
+          </div>
+          <div class="row">
+            <span>Max hyphens / paragraph</span>
+            <input id="maxHyphensPerParagraph" type="number" min="0" max="20" step="1" />
           </div>
         </section>
 
@@ -259,8 +271,9 @@
         preventOrphans: document.getElementById("preventOrphans"),
         hangingHyphen: document.getElementById("hangingHyphen"),
         optimizeLetterSpacing: document.getElementById("optimizeLetterSpacing"),
-        experimentalWordSpacingEnabled: document.getElementById("experimentalWordSpacingEnabled"),
-        experimentalWordSpacingPercent: document.getElementById("wsPercent"),
+        hyphenationIntensity: document.getElementById("hyphenationIntensity"),
+        minWordLengthForHyphenation: document.getElementById("minWordLengthForHyphenation"),
+        maxHyphensPerParagraph: document.getElementById("maxHyphensPerParagraph"),
         letterSpacingMinPercent: document.getElementById("lsMin"),
         letterSpacingDesiredPercent: document.getElementById("lsDesired"),
         letterSpacingMaxPercent: document.getElementById("lsMax"),
@@ -294,12 +307,14 @@
         fields.preventOrphans.checked = Boolean(settings.preventOrphans);
         fields.hangingHyphen.checked = Boolean(settings.hangingHyphen);
         fields.optimizeLetterSpacing.checked = Boolean(settings.optimizeLetterSpacing);
-        fields.experimentalWordSpacingEnabled.checked = Boolean(
-          settings.experimentalWordSpacingEnabled
+        fields.hyphenationIntensity.value = settings.hyphenationIntensity || "normal";
+        setNumeric(
+          fields.minWordLengthForHyphenation,
+          Number(settings.minWordLengthForHyphenation)
         );
         setNumeric(
-          fields.experimentalWordSpacingPercent,
-          Number(settings.experimentalWordSpacingPercent)
+          fields.maxHyphensPerParagraph,
+          Number(settings.maxHyphensPerParagraph)
         );
         setNumeric(fields.letterSpacingMinPercent, Number(settings.letterSpacingMinPercent));
         setNumeric(fields.letterSpacingDesiredPercent, Number(settings.letterSpacingDesiredPercent));
@@ -313,8 +328,9 @@
           preventOrphans: fields.preventOrphans.checked,
           hangingHyphen: fields.hangingHyphen.checked,
           optimizeLetterSpacing: fields.optimizeLetterSpacing.checked,
-          experimentalWordSpacingEnabled: fields.experimentalWordSpacingEnabled.checked,
-          experimentalWordSpacingPercent: Number(fields.experimentalWordSpacingPercent.value),
+          hyphenationIntensity: fields.hyphenationIntensity.value,
+          minWordLengthForHyphenation: Number(fields.minWordLengthForHyphenation.value),
+          maxHyphensPerParagraph: Number(fields.maxHyphensPerParagraph.value),
           letterSpacingMinPercent: Number(fields.letterSpacingMinPercent.value),
           letterSpacingDesiredPercent: Number(fields.letterSpacingDesiredPercent.value),
           letterSpacingMaxPercent: Number(fields.letterSpacingMaxPercent.value),
