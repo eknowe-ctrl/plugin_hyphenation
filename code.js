@@ -393,6 +393,9 @@
     }
     return text.replace(/ +/g, (spaces) => replacement.repeat(spaces.length));
   }
+  function isJustifiedTextNode(node) {
+    return node.textAlignHorizontal === "JUSTIFIED";
+  }
   function resetHyphenationText(text) {
     return normalizeExperimentalWordSpacing(normalizeTextForRehyphenation(text)).replace(
       /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
@@ -975,11 +978,18 @@
           } else {
             const mixedTypography = hasMixedTypography(node);
             let normalized = normalizeTextForRehyphenation(original);
-            if (settings.experimentalWordSpacingEnabled) {
+            const canApplyExperimentalWordSpacing = settings.experimentalWordSpacingEnabled && !isJustifiedTextNode(node);
+            if (settings.experimentalWordSpacingEnabled && !canApplyExperimentalWordSpacing) {
+              pushSkippedReason(
+                node,
+                "Experimental \u0440\u0430\u0437\u043C\u0435\u0440 \u043F\u0440\u043E\u0431\u0435\u043B\u043E\u0432 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D \u0434\u043B\u044F full justification (JUSTIFIED), \u0447\u0442\u043E\u0431\u044B \u043D\u0435 \u043B\u043E\u043C\u0430\u0442\u044C \u0432\u044B\u043A\u043B\u044E\u0447\u043A\u0443."
+              );
+            }
+            if (canApplyExperimentalWordSpacing) {
               normalized = normalizeExperimentalWordSpacing(normalized);
             }
             let preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
-            if (settings.experimentalWordSpacingEnabled) {
+            if (canApplyExperimentalWordSpacing) {
               preparedText = applyExperimentalWordSpacing(
                 preparedText,
                 settings.experimentalWordSpacingPercent

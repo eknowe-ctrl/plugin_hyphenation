@@ -261,6 +261,10 @@ function applyExperimentalWordSpacing(text, percent) {
   return text.replace(/ +/g, (spaces) => replacement.repeat(spaces.length));
 }
 
+function isJustifiedTextNode(node) {
+  return node.textAlignHorizontal === "JUSTIFIED";
+}
+
 function resetHyphenationText(text) {
   return normalizeExperimentalWordSpacing(normalizeTextForRehyphenation(text)).replace(
     /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
@@ -947,7 +951,17 @@ async function processTextNodes(textNodes, mode, settings) {
         const mixedTypography = hasMixedTypography(node);
 
         let normalized = normalizeTextForRehyphenation(original);
-        if (settings.experimentalWordSpacingEnabled) {
+        const canApplyExperimentalWordSpacing =
+          settings.experimentalWordSpacingEnabled && !isJustifiedTextNode(node);
+
+        if (settings.experimentalWordSpacingEnabled && !canApplyExperimentalWordSpacing) {
+          pushSkippedReason(
+            node,
+            "Experimental размер пробелов отключён для full justification (JUSTIFIED), чтобы не ломать выключку."
+          );
+        }
+
+        if (canApplyExperimentalWordSpacing) {
           normalized = normalizeExperimentalWordSpacing(normalized);
         }
 
@@ -955,7 +969,7 @@ async function processTextNodes(textNodes, mode, settings) {
           ? preventRussianOrphans(normalized)
           : normalized;
 
-        if (settings.experimentalWordSpacingEnabled) {
+        if (canApplyExperimentalWordSpacing) {
           preparedText = applyExperimentalWordSpacing(
             preparedText,
             settings.experimentalWordSpacingPercent
