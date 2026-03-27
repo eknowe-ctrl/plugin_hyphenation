@@ -100,6 +100,7 @@ let autoRecalcQueued = false;
 let suppressDocumentChangeUntil = 0;
 let manualActionInProgress = false;
 let runtimeSettings = { ...DEFAULT_SETTINGS };
+let documentChangeWatchSupported = true;
 
 function clampNumber(value, minValue, maxValue) {
   if (Number.isNaN(value)) {
@@ -1265,33 +1266,6 @@ async function run() {
   postUiDebug(null);
   postUiStatus("Выделите текст и выберите действие.", "info");
 
-  figma.on("documentchange", () => {
-    if (!runtimeSettings.autoWatch) {
-      return;
-    }
-
-    if (watchedNodeIds.size === 0) {
-      return;
-    }
-
-    if (Date.now() < suppressDocumentChangeUntil) {
-      return;
-    }
-
-    if (manualActionInProgress || autoRecalcInProgress) {
-      if (didWatchedWidthChange()) {
-        autoRecalcQueued = true;
-      }
-      return;
-    }
-
-    if (!didWatchedWidthChange()) {
-      return;
-    }
-
-    scheduleAutoRecalc();
-  });
-
   figma.ui.onmessage = async (message) => {
     if (!message || typeof message !== "object") {
       return;
@@ -1336,6 +1310,48 @@ async function run() {
       await handleAction(message.type);
     }
   };
+
+  try {
+    figma.on("documentchange", () => {
+      if (!runtimeSettings.autoWatch) {
+        return;
+      }
+
+      if (watchedNodeIds.size === 0) {
+        return;
+      }
+
+      if (Date.now() < suppressDocumentChangeUntil) {
+        return;
+      }
+
+      if (manualActionInProgress || autoRecalcInProgress) {
+        if (didWatchedWidthChange()) {
+          autoRecalcQueued = true;
+        }
+        return;
+      }
+
+      if (!didWatchedWidthChange()) {
+        return;
+      }
+
+      scheduleAutoRecalc();
+    });
+  } catch (error) {
+    // Если documentchange недоступен в среде публикации, оставляем ручной режим.
+    console.warn("Автопересчёт отключён: documentchange недоступен.", error);
+    runtimeSettings = normalizeSettings({
+      ...runtimeSettings,
+      autoWatch: false
+    });
+    await persistRuntimeSettings();
+    postUiSettings();
+    postUiStatus(
+      "Автопересчёт отключён в этой среде. Ручной режим доступен.",
+      "info"
+    );
+  }
 }
 
 void run().catch((error) => {

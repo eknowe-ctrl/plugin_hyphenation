@@ -1231,27 +1231,6 @@
       postUiSettings();
       postUiDebug(null);
       postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
-      figma.on("documentchange", () => {
-        if (!runtimeSettings.autoWatch) {
-          return;
-        }
-        if (watchedNodeIds.size === 0) {
-          return;
-        }
-        if (Date.now() < suppressDocumentChangeUntil) {
-          return;
-        }
-        if (manualActionInProgress || autoRecalcInProgress) {
-          if (didWatchedWidthChange()) {
-            autoRecalcQueued = true;
-          }
-          return;
-        }
-        if (!didWatchedWidthChange()) {
-          return;
-        }
-        scheduleAutoRecalc();
-      });
       figma.ui.onmessage = (message) => __async(null, null, function* () {
         if (!message || typeof message !== "object") {
           return;
@@ -1289,6 +1268,40 @@
           yield handleAction(message.type);
         }
       });
+      try {
+        figma.on("documentchange", () => {
+          if (!runtimeSettings.autoWatch) {
+            return;
+          }
+          if (watchedNodeIds.size === 0) {
+            return;
+          }
+          if (Date.now() < suppressDocumentChangeUntil) {
+            return;
+          }
+          if (manualActionInProgress || autoRecalcInProgress) {
+            if (didWatchedWidthChange()) {
+              autoRecalcQueued = true;
+            }
+            return;
+          }
+          if (!didWatchedWidthChange()) {
+            return;
+          }
+          scheduleAutoRecalc();
+        });
+      } catch (error) {
+        console.warn("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D: documentchange \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.", error);
+        runtimeSettings = normalizeSettings(__spreadProps(__spreadValues({}, runtimeSettings), {
+          autoWatch: false
+        }));
+        yield persistRuntimeSettings();
+        postUiSettings();
+        postUiStatus(
+          "\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D \u0432 \u044D\u0442\u043E\u0439 \u0441\u0440\u0435\u0434\u0435. \u0420\u0443\u0447\u043D\u043E\u0439 \u0440\u0435\u0436\u0438\u043C \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.",
+          "info"
+        );
+      }
     });
   }
   void run().catch((error) => {
