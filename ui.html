@@ -258,15 +258,15 @@
     </main>
 
     <script>
-      var applyButton = document.getElementById("apply-button");
-      var resetButton = document.getElementById("reset-button");
-      var closeButton = document.getElementById("close-button");
-      var presetSelect = document.getElementById("preset");
-      var statusNode = document.getElementById("status");
-      var debugMeta = document.getElementById("debug-meta");
-      var debugList = document.getElementById("debug-list");
+      const applyButton = document.getElementById("apply-button");
+      const resetButton = document.getElementById("reset-button");
+      const closeButton = document.getElementById("close-button");
+      const presetSelect = document.getElementById("preset");
+      const statusNode = document.getElementById("status");
+      const debugMeta = document.getElementById("debug-meta");
+      const debugList = document.getElementById("debug-list");
 
-      var fields = {
+      const fields = {
         autoWatch: document.getElementById("autoWatch"),
         preventOrphans: document.getElementById("preventOrphans"),
         hangingHyphen: document.getElementById("hangingHyphen"),
@@ -280,15 +280,8 @@
         letterSpacingStepPercent: document.getElementById("lsStep")
       };
 
-      function send(type, payload) {
-        var extra = payload || {};
-        var pluginMessage = { type: type };
-        for (var key in extra) {
-          if (Object.prototype.hasOwnProperty.call(extra, key)) {
-            pluginMessage[key] = extra[key];
-          }
-        }
-        parent.postMessage({ pluginMessage: pluginMessage }, "*");
+      function send(type, payload = {}) {
+        parent.postMessage({ pluginMessage: { type, ...payload } }, "*");
       }
 
       function setLoading(isLoading) {
@@ -302,7 +295,7 @@
       }
 
       function setNumeric(input, value) {
-        input.value = isFinite(value) ? String(value) : "0";
+        input.value = Number.isFinite(value) ? String(value) : "0";
       }
 
       function renderSettings(settings) {
@@ -352,60 +345,42 @@
           return;
         }
 
-        debugMeta.textContent =
-          "mode: " +
-          debug.mode +
-          ", changed: " +
-          debug.changedNodes +
-          "/" +
-          debug.totalNodes +
-          ", skipped: " +
-          debug.skippedNodes;
+        debugMeta.textContent = `mode: ${debug.mode}, changed: ${debug.changedNodes}/${debug.totalNodes}, skipped: ${debug.skippedNodes}`;
         debugList.innerHTML = "";
 
         if (!Array.isArray(debug.skippedReasons) || debug.skippedReasons.length === 0) {
           return;
         }
 
-        for (var i = 0; i < debug.skippedReasons.length; i += 1) {
-          var item = debug.skippedReasons[i];
-          var li = document.createElement("li");
-          var name = item.nodeName || item.nodeId || "unknown";
-          li.textContent = name + ": " + item.reason;
+        for (const item of debug.skippedReasons) {
+          const li = document.createElement("li");
+          const name = item.nodeName || item.nodeId || "unknown";
+          li.textContent = `${name}: ${item.reason}`;
           debugList.appendChild(li);
         }
       }
 
-      applyButton.addEventListener("click", function () {
-        send("apply");
-      });
-      resetButton.addEventListener("click", function () {
-        send("reset");
-      });
-      closeButton.addEventListener("click", function () {
-        send("close");
-      });
+      applyButton.addEventListener("click", () => send("apply"));
+      resetButton.addEventListener("click", () => send("reset"));
+      closeButton.addEventListener("click", () => send("close"));
 
-      presetSelect.addEventListener("change", function () {
+      presetSelect.addEventListener("change", () => {
         if (presetSelect.value === "custom") {
           return;
         }
         send("select-preset", { preset: presetSelect.value });
       });
 
-      for (var fieldKey in fields) {
-        if (!Object.prototype.hasOwnProperty.call(fields, fieldKey)) {
-          continue;
-        }
-        fields[fieldKey].addEventListener("change", function () {
+      Object.values(fields).forEach((node) => {
+        node.addEventListener("change", () => {
           send("save-settings", {
             settings: collectManualSettings()
           });
         });
-      }
+      });
 
-      window.onmessage = function (event) {
-        var message = event.data.pluginMessage;
+      window.onmessage = (event) => {
+        const message = event.data.pluginMessage;
         if (!message || typeof message !== "object") {
           return;
         }
