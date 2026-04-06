@@ -693,45 +693,9 @@ function createCloneWidthMeasurer(node, letterSpacing) {
 }
 
 function createWidthMeasurer(node, letterSpacing) {
-  if (hasMixedTypography(node)) {
-    return createCloneWidthMeasurer(node, letterSpacing);
-  }
-
-  const probe = figma.createText();
-  probe.visible = false;
-  probe.x = -100000;
-  probe.y = -100000;
-  probe.textAutoResize = "WIDTH_AND_HEIGHT";
-  probe.fontName = node.fontName;
-  probe.fontSize = node.fontSize;
-  probe.lineHeight = node.lineHeight;
-  probe.letterSpacing = letterSpacing || node.letterSpacing;
-  probe.textCase = node.textCase;
-  probe.textDecoration = node.textDecoration;
-
-  const cache = new Map();
-  const measure = (text) => {
-    if (!text || text.length === 0) {
-      return 0;
-    }
-
-    const cached = cache.get(text);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    probe.characters = text;
-    const width = probe.width;
-    cache.set(text, width);
-    return width;
-  };
-
-  return {
-    measure,
-    destroy() {
-      probe.remove();
-    }
-  };
+  // В published-окружении запись в figma.createText() может падать,
+  // если системный Inter ещё не загружен. Клон текущего узла снимает это ограничение.
+  return createCloneWidthMeasurer(node, letterSpacing);
 }
 
 function collectTextNodes(nodes) {

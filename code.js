@@ -736,40 +736,7 @@
     };
   }
   function createWidthMeasurer(node, letterSpacing) {
-    if (hasMixedTypography(node)) {
-      return createCloneWidthMeasurer(node, letterSpacing);
-    }
-    const probe = figma.createText();
-    probe.visible = false;
-    probe.x = -1e5;
-    probe.y = -1e5;
-    probe.textAutoResize = "WIDTH_AND_HEIGHT";
-    probe.fontName = node.fontName;
-    probe.fontSize = node.fontSize;
-    probe.lineHeight = node.lineHeight;
-    probe.letterSpacing = letterSpacing || node.letterSpacing;
-    probe.textCase = node.textCase;
-    probe.textDecoration = node.textDecoration;
-    const cache = /* @__PURE__ */ new Map();
-    const measure = (text) => {
-      if (!text || text.length === 0) {
-        return 0;
-      }
-      const cached = cache.get(text);
-      if (cached !== void 0) {
-        return cached;
-      }
-      probe.characters = text;
-      const width = probe.width;
-      cache.set(text, width);
-      return width;
-    };
-    return {
-      measure,
-      destroy() {
-        probe.remove();
-      }
-    };
+    return createCloneWidthMeasurer(node, letterSpacing);
   }
   function collectTextNodes(nodes) {
     const textNodes = [];
