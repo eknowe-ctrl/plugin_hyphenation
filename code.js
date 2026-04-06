@@ -777,8 +777,10 @@
     });
   }
   function setWatchNodes(textNodes) {
-    watchedNodeIds = new Set(textNodes.map((node) => node.id));
-    refreshWatchedNodeWidths();
+    return __async(this, null, function* () {
+      watchedNodeIds = new Set(textNodes.map((node) => node.id));
+      yield refreshWatchedNodeWidths();
+    });
   }
   function clearWatchNodes() {
     watchedNodeIds.clear();
@@ -790,48 +792,54 @@
     }
   }
   function refreshWatchedNodeWidths() {
-    const nextIds = /* @__PURE__ */ new Set();
-    const nextWidths = /* @__PURE__ */ new Map();
-    for (const id of watchedNodeIds) {
-      const node = figma.getNodeById(id);
-      if (!node || node.type !== "TEXT") {
-        continue;
+    return __async(this, null, function* () {
+      const nextIds = /* @__PURE__ */ new Set();
+      const nextWidths = /* @__PURE__ */ new Map();
+      for (const id of watchedNodeIds) {
+        const node = yield figma.getNodeByIdAsync(id);
+        if (!node || node.type !== "TEXT") {
+          continue;
+        }
+        nextIds.add(id);
+        nextWidths.set(id, node.width);
       }
-      nextIds.add(id);
-      nextWidths.set(id, node.width);
-    }
-    watchedNodeIds = nextIds;
-    watchedNodeWidths = nextWidths;
+      watchedNodeIds = nextIds;
+      watchedNodeWidths = nextWidths;
+    });
   }
   function getWatchedTextNodes() {
-    const nodes = [];
-    for (const id of watchedNodeIds) {
-      const node = figma.getNodeById(id);
-      if (node && node.type === "TEXT") {
-        nodes.push(node);
+    return __async(this, null, function* () {
+      const nodes = [];
+      for (const id of watchedNodeIds) {
+        const node = yield figma.getNodeByIdAsync(id);
+        if (node && node.type === "TEXT") {
+          nodes.push(node);
+        }
       }
-    }
-    return nodes;
+      return nodes;
+    });
   }
   function didWatchedWidthChange() {
-    let changed = false;
-    const nextIds = /* @__PURE__ */ new Set();
-    const nextWidths = /* @__PURE__ */ new Map();
-    for (const id of watchedNodeIds) {
-      const node = figma.getNodeById(id);
-      if (!node || node.type !== "TEXT") {
-        continue;
+    return __async(this, null, function* () {
+      let changed = false;
+      const nextIds = /* @__PURE__ */ new Set();
+      const nextWidths = /* @__PURE__ */ new Map();
+      for (const id of watchedNodeIds) {
+        const node = yield figma.getNodeByIdAsync(id);
+        if (!node || node.type !== "TEXT") {
+          continue;
+        }
+        nextIds.add(id);
+        nextWidths.set(id, node.width);
+        const previousWidth = watchedNodeWidths.get(id);
+        if (previousWidth === void 0 || Math.abs(previousWidth - node.width) > WIDTH_EPSILON) {
+          changed = true;
+        }
       }
-      nextIds.add(id);
-      nextWidths.set(id, node.width);
-      const previousWidth = watchedNodeWidths.get(id);
-      if (previousWidth === void 0 || Math.abs(previousWidth - node.width) > WIDTH_EPSILON) {
-        changed = true;
-      }
-    }
-    watchedNodeIds = nextIds;
-    watchedNodeWidths = nextWidths;
-    return changed;
+      watchedNodeIds = nextIds;
+      watchedNodeWidths = nextWidths;
+      return changed;
+    });
   }
   function suppressOwnDocumentChanges() {
     const nextSuppressUntil = Date.now() + SELF_CHANGE_SUPPRESS_MS;
@@ -1067,11 +1075,10 @@
     const selection = figma.currentPage.selection;
     if (selection.length === 0) {
       clearWatchNodes();
-      return 0;
+      return Promise.resolve(0);
     }
     const textNodes = collectTextNodes(selection);
-    setWatchNodes(textNodes);
-    return textNodes.length;
+    return setWatchNodes(textNodes).then(() => textNodes.length);
   }
   function scheduleAutoRecalc() {
     if (autoRecalcTimer) {
@@ -1091,7 +1098,7 @@
         autoRecalcQueued = true;
         return;
       }
-      const watchedNodes = getWatchedTextNodes();
+      const watchedNodes = yield getWatchedTextNodes();
       if (watchedNodes.length === 0) {
         clearWatchNodes();
         postUiStatus("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D: \u043E\u0442\u0441\u043B\u0435\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u0441\u043B\u043E\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B.", "info");
@@ -1102,7 +1109,7 @@
       suppressOwnDocumentChanges();
       try {
         const result = yield processTextNodes(watchedNodes, APPLY_MODE, runtimeSettings);
-        refreshWatchedNodeWidths();
+        yield refreshWatchedNodeWidths();
         postUiDebug(result.debug);
         if (result.kind === "error") {
           postUiStatus(`\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442: ${result.text}`, "error");
@@ -1138,7 +1145,7 @@
             postUiStatus(result.text, result.kind);
           } else {
             if (runtimeSettings.autoWatch) {
-              const watchedCount = enableAutoWatchFromSelection();
+              const watchedCount = yield enableAutoWatchFromSelection();
               if (watchedCount > 0) {
                 postUiStatus(
                   `${result.text} \u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u0432\u043A\u043B\u044E\u0447\u0451\u043D: \u043F\u0440\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0448\u0438\u0440\u0438\u043D\u044B \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.`,
@@ -1162,7 +1169,7 @@
         } else {
           postUiStatus(result.text, result.kind);
         }
-        refreshWatchedNodeWidths();
+        yield refreshWatchedNodeWidths();
         figma.notify(result.text);
       } catch (error) {
         console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u0430\u043D\u0434\u044B \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
@@ -1237,7 +1244,7 @@
       });
       try {
         yield figma.loadAllPagesAsync();
-        figma.on("documentchange", () => {
+        figma.on("documentchange", () => __async(null, null, function* () {
           if (!runtimeSettings.autoWatch) {
             return;
           }
@@ -1248,16 +1255,16 @@
             return;
           }
           if (manualActionInProgress || autoRecalcInProgress) {
-            if (didWatchedWidthChange()) {
+            if (yield didWatchedWidthChange()) {
               autoRecalcQueued = true;
             }
             return;
           }
-          if (!didWatchedWidthChange()) {
+          if (!(yield didWatchedWidthChange())) {
             return;
           }
           scheduleAutoRecalc();
-        });
+        }));
       } catch (error) {
         console.warn("\u0410\u0432\u0442\u043E\u043F\u0435\u0440\u0435\u0441\u0447\u0451\u0442 \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D: documentchange \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.", error);
         runtimeSettings = normalizeSettings(__spreadProps(__spreadValues({}, runtimeSettings), {

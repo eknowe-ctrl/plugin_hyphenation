@@ -742,9 +742,9 @@ async function loadFontsForNode(node) {
   }
 }
 
-function setWatchNodes(textNodes) {
+async function setWatchNodes(textNodes) {
   watchedNodeIds = new Set(textNodes.map((node) => node.id));
-  refreshWatchedNodeWidths();
+  await refreshWatchedNodeWidths();
 }
 
 function clearWatchNodes() {
@@ -757,12 +757,12 @@ function clearWatchNodes() {
   }
 }
 
-function refreshWatchedNodeWidths() {
+async function refreshWatchedNodeWidths() {
   const nextIds = new Set();
   const nextWidths = new Map();
 
   for (const id of watchedNodeIds) {
-    const node = figma.getNodeById(id);
+    const node = await figma.getNodeByIdAsync(id);
     if (!node || node.type !== "TEXT") {
       continue;
     }
@@ -774,10 +774,10 @@ function refreshWatchedNodeWidths() {
   watchedNodeWidths = nextWidths;
 }
 
-function getWatchedTextNodes() {
+async function getWatchedTextNodes() {
   const nodes = [];
   for (const id of watchedNodeIds) {
-    const node = figma.getNodeById(id);
+    const node = await figma.getNodeByIdAsync(id);
     if (node && node.type === "TEXT") {
       nodes.push(node);
     }
@@ -785,13 +785,13 @@ function getWatchedTextNodes() {
   return nodes;
 }
 
-function didWatchedWidthChange() {
+async function didWatchedWidthChange() {
   let changed = false;
   const nextIds = new Set();
   const nextWidths = new Map();
 
   for (const id of watchedNodeIds) {
-    const node = figma.getNodeById(id);
+    const node = await figma.getNodeByIdAsync(id);
     if (!node || node.type !== "TEXT") {
       continue;
     }
@@ -1087,12 +1087,11 @@ function enableAutoWatchFromSelection() {
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {
     clearWatchNodes();
-    return 0;
+    return Promise.resolve(0);
   }
 
   const textNodes = collectTextNodes(selection);
-  setWatchNodes(textNodes);
-  return textNodes.length;
+  return setWatchNodes(textNodes).then(() => textNodes.length);
 }
 
 function scheduleAutoRecalc() {
@@ -1116,7 +1115,7 @@ async function runAutoRecalc() {
     return;
   }
 
-  const watchedNodes = getWatchedTextNodes();
+  const watchedNodes = await getWatchedTextNodes();
   if (watchedNodes.length === 0) {
     clearWatchNodes();
     postUiStatus("Автопересчёт остановлен: отслеживаемые слои не найдены.", "info");
@@ -1129,7 +1128,7 @@ async function runAutoRecalc() {
 
   try {
     const result = await processTextNodes(watchedNodes, APPLY_MODE, runtimeSettings);
-    refreshWatchedNodeWidths();
+    await refreshWatchedNodeWidths();
     postUiDebug(result.debug);
 
     if (result.kind === "error") {
@@ -1167,7 +1166,7 @@ async function handleAction(mode) {
         postUiStatus(result.text, result.kind);
       } else {
         if (runtimeSettings.autoWatch) {
-          const watchedCount = enableAutoWatchFromSelection();
+          const watchedCount = await enableAutoWatchFromSelection();
           if (watchedCount > 0) {
             postUiStatus(
               `${result.text} Автопересчёт включён: при изменении ширины переносы обновляются автоматически.`,
@@ -1192,7 +1191,7 @@ async function handleAction(mode) {
       postUiStatus(result.text, result.kind);
     }
 
-    refreshWatchedNodeWidths();
+    await refreshWatchedNodeWidths();
     figma.notify(result.text);
   } catch (error) {
     console.error("Ошибка выполнения команды плагина", error);
@@ -1278,7 +1277,7 @@ async function run() {
   try {
     // В published/incremental режиме подписка на documentchange требует загрузки всех страниц.
     await figma.loadAllPagesAsync();
-    figma.on("documentchange", () => {
+    figma.on("documentchange", async () => {
       if (!runtimeSettings.autoWatch) {
         return;
       }
@@ -1292,13 +1291,13 @@ async function run() {
       }
 
       if (manualActionInProgress || autoRecalcInProgress) {
-        if (didWatchedWidthChange()) {
+        if (await didWatchedWidthChange()) {
           autoRecalcQueued = true;
         }
         return;
       }
 
-      if (!didWatchedWidthChange()) {
+      if (!(await didWatchedWidthChange())) {
         return;
       }
 
