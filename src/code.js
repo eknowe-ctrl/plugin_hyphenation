@@ -1276,6 +1276,8 @@ async function run() {
   };
 
   try {
+    // В published/incremental режиме подписка на documentchange требует загрузки всех страниц.
+    await figma.loadAllPagesAsync();
     figma.on("documentchange", () => {
       if (!runtimeSettings.autoWatch) {
         return;

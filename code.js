@@ -1236,6 +1236,7 @@
         }
       });
       try {
+        yield figma.loadAllPagesAsync();
         figma.on("documentchange", () => {
           if (!runtimeSettings.autoWatch) {
             return;
