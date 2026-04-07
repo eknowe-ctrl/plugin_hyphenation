@@ -1215,7 +1215,7 @@ async function run() {
   try {
     figma.showUI(__html__, {
       width: 360,
-      height: 700,
+      height: 800,
       themeColors: false
     });
   } catch (error) {
