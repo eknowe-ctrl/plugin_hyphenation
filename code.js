@@ -191,6 +191,10 @@
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
   var CUSTOM_PRESET = "custom";
+  var UI_WINDOW_WIDTH = 360;
+  var UI_INITIAL_HEIGHT = 760;
+  var UI_MIN_HEIGHT = 620;
+  var UI_MAX_HEIGHT = 1100;
   var TYPOGRAPHY_PRESETS = {
     interface: {
       autoWatch: true,
@@ -279,6 +283,13 @@
       return value;
     }
     return CUSTOM_PRESET;
+  }
+  function normalizeUiHeight(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return UI_INITIAL_HEIGHT;
+    }
+    return Math.round(clampNumber(parsed, UI_MIN_HEIGHT, UI_MAX_HEIGHT));
   }
   function normalizeSettings(input) {
     var _a, _b, _c, _d, _e, _f, _g;
@@ -1192,8 +1203,8 @@
     return __async(this, null, function* () {
       try {
         figma.showUI(__html__, {
-          width: 360,
-          height: 800,
+          width: UI_WINDOW_WIDTH,
+          height: UI_INITIAL_HEIGHT,
           themeColors: false
         });
       } catch (error) {
@@ -1207,6 +1218,14 @@
       postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
       figma.ui.onmessage = (message) => __async(null, null, function* () {
         if (!message || typeof message !== "object") {
+          return;
+        }
+        if (message.type === "resize-ui") {
+          try {
+            figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+          } catch (error) {
+            console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u0430\u0437\u043C\u0435\u0440 UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
+          }
           return;
         }
         if (message.type === "request-settings") {

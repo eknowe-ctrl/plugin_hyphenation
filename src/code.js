@@ -21,6 +21,10 @@ const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
 const CUSTOM_PRESET = "custom";
+const UI_WINDOW_WIDTH = 360;
+const UI_INITIAL_HEIGHT = 760;
+const UI_MIN_HEIGHT = 620;
+const UI_MAX_HEIGHT = 1100;
 
 const TYPOGRAPHY_PRESETS = {
   interface: {
@@ -117,6 +121,14 @@ function normalizePresetName(value) {
     return value;
   }
   return CUSTOM_PRESET;
+}
+
+function normalizeUiHeight(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return UI_INITIAL_HEIGHT;
+  }
+  return Math.round(clampNumber(parsed, UI_MIN_HEIGHT, UI_MAX_HEIGHT));
 }
 
 function normalizeSettings(input) {
@@ -1214,8 +1226,8 @@ async function handleAction(mode) {
 async function run() {
   try {
     figma.showUI(__html__, {
-      width: 360,
-      height: 800,
+      width: UI_WINDOW_WIDTH,
+      height: UI_INITIAL_HEIGHT,
       themeColors: false
     });
   } catch (error) {
@@ -1231,6 +1243,15 @@ async function run() {
 
   figma.ui.onmessage = async (message) => {
     if (!message || typeof message !== "object") {
+      return;
+    }
+
+    if (message.type === "resize-ui") {
+      try {
+        figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+      } catch (error) {
+        console.warn("Не удалось изменить размер UI плагина", error);
+      }
       return;
     }
 
