@@ -14,6 +14,7 @@
         width: 100%;
         height: 100%;
         margin: 0;
+        overflow: hidden;
         font-family: Inter, system-ui, -apple-system, sans-serif;
         background: #f7f8fb;
         color: #1f2937;
@@ -26,7 +27,7 @@
       }
 
       .header {
-        padding: 14px 16px 10px;
+        padding: 12px 14px 8px;
         border-bottom: 1px solid #e5e7eb;
         background: #ffffff;
       }
@@ -45,12 +46,15 @@
 
       .content {
         flex: 1;
-        overflow: auto;
-        padding: 12px 16px 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 14px 8px;
       }
 
       .footer {
-        padding: 8px 16px 12px;
+        padding: 7px 16px 10px;
         font-size: 11px;
         color: #9ca3af;
         text-align: center;
@@ -62,8 +66,7 @@
         background: #ffffff;
         border: 1px solid #e5e7eb;
         border-radius: 8px;
-        padding: 10px;
-        margin-bottom: 10px;
+        padding: 9px;
       }
 
       .section h3 {
@@ -76,7 +79,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        margin: 6px 0;
+        margin: 5px 0;
         font-size: 11px;
       }
 
@@ -104,7 +107,7 @@
 
       .actions {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 8px;
       }
 
@@ -125,12 +128,6 @@
         border-color: #9ca3af;
         background: #ffffff;
         color: #111827;
-      }
-
-      #close-button {
-        border-color: #d1d5db;
-        background: #f9fafb;
-        color: #374151;
       }
 
       button:disabled {
@@ -159,8 +156,8 @@
         padding-left: 16px;
         font-size: 10.5px;
         line-height: 1.35;
-        max-height: 170px;
-        overflow: auto;
+        max-height: 56px;
+        overflow: hidden;
       }
 
       .debug-meta {
@@ -173,7 +170,7 @@
   <body>
     <main class="panel">
       <header class="header">
-        <h1 class="title">Russian Hyphenation</h1>
+        <h1 class="title">Русские переносы</h1>
         <p class="subtitle">Настройки сохраняются между запусками плагина</p>
       </header>
 
@@ -181,16 +178,16 @@
         <section class="section">
           <h3>Профиль типографики</h3>
           <div class="row">
-            <span>Preset</span>
+            <span>Профиль</span>
             <select id="preset">
-              <option value="interface">Interface</option>
-              <option value="book">Book</option>
-              <option value="dense">Dense</option>
-              <option value="custom">Custom</option>
+              <option value="interface">Интерфейс</option>
+              <option value="book">Книга</option>
+              <option value="dense">Плотно</option>
+              <option value="custom">Свой</option>
             </select>
           </div>
           <div class="row">
-            <label><input type="checkbox" id="autoWatch" /> Автопересчёт при изменении ширины</label>
+            <label><input type="checkbox" id="autoWatch" /> Автопересчёт по ширине</label>
           </div>
           <div class="row">
             <label><input type="checkbox" id="preventOrphans" /> Анти-висячие предлоги</label>
@@ -199,48 +196,48 @@
             <label><input type="checkbox" id="hangingHyphen" /> Висячий дефис</label>
           </div>
           <div class="row">
-            <label><input type="checkbox" id="optimizeLetterSpacing" /> Оптимизация letter spacing</label>
+            <label><input type="checkbox" id="optimizeLetterSpacing" /> Опт. межбукв.</label>
           </div>
           <div class="row">
-            <span>Hyphenation mode</span>
+            <span>Режим переноса</span>
             <select id="hyphenationIntensity">
-              <option value="soft">Soft</option>
-              <option value="normal">Normal</option>
-              <option value="aggressive">Aggressive</option>
+              <option value="soft">Мягкий</option>
+              <option value="normal">Нормальный</option>
+              <option value="aggressive">Агрессивный</option>
             </select>
           </div>
           <div class="row">
-            <span>Min word length</span>
+            <span>Мин. длина слова</span>
             <input id="minWordLengthForHyphenation" type="number" min="4" max="12" step="1" />
           </div>
           <div class="row">
-            <span>Max hyphens / paragraph</span>
+            <span>Макс. переносов/абзац</span>
             <input id="maxHyphensPerParagraph" type="number" min="0" max="20" step="1" />
           </div>
         </section>
 
         <section class="section">
-          <h3>Letter spacing (%)</h3>
+          <h3>Межбукв. интервал (%)</h3>
           <div class="row">
-            <span>Minimum</span>
+            <span>Мин.</span>
             <input id="lsMin" type="number" step="0.1" />
           </div>
           <div class="row">
-            <span>Desired</span>
+            <span>Цель</span>
             <input id="lsDesired" type="number" step="0.1" />
           </div>
           <div class="row">
-            <span>Maximum</span>
+            <span>Макс.</span>
             <input id="lsMax" type="number" step="0.1" />
           </div>
           <div class="row">
-            <span>Step</span>
+            <span>Шаг</span>
             <input id="lsStep" type="number" min="0.1" step="0.1" />
           </div>
         </section>
 
         <section class="section">
-          <h3>Отладка пропусков</h3>
+          <h3>Диагностика</h3>
           <div class="debug-meta" id="debug-meta">Нет данных</div>
           <ul class="debug-list" id="debug-list"></ul>
         </section>
@@ -249,7 +246,6 @@
           <div class="actions">
             <button id="apply-button">Применить</button>
             <button id="reset-button">Сбросить</button>
-            <button id="close-button">Закрыть</button>
           </div>
           <div class="status" id="status" aria-live="polite"></div>
         </section>
@@ -260,7 +256,6 @@
     <script>
       var applyButton = document.getElementById("apply-button");
       var resetButton = document.getElementById("reset-button");
-      var closeButton = document.getElementById("close-button");
       var presetSelect = document.getElementById("preset");
       var statusNode = document.getElementById("status");
       var debugMeta = document.getElementById("debug-meta");
@@ -353,13 +348,13 @@
         }
 
         debugMeta.textContent =
-          "mode: " +
+          "режим: " +
           debug.mode +
-          ", changed: " +
+          ", изменено: " +
           debug.changedNodes +
           "/" +
           debug.totalNodes +
-          ", skipped: " +
+          ", пропущено: " +
           debug.skippedNodes;
         debugList.innerHTML = "";
 
@@ -370,7 +365,7 @@
         for (var i = 0; i < debug.skippedReasons.length; i += 1) {
           var item = debug.skippedReasons[i];
           var li = document.createElement("li");
-          var name = item.nodeName || item.nodeId || "unknown";
+          var name = item.nodeName || item.nodeId || "без имени";
           li.textContent = name + ": " + item.reason;
           debugList.appendChild(li);
         }
@@ -381,9 +376,6 @@
       });
       resetButton.addEventListener("click", function () {
         send("reset");
-      });
-      closeButton.addEventListener("click", function () {
-        send("close");
       });
 
       presetSelect.addEventListener("change", function () {

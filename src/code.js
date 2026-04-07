@@ -1215,7 +1215,7 @@ async function run() {
   try {
     figma.showUI(__html__, {
       width: 360,
-      height: 560,
+      height: 740,
       themeColors: false
     });
   } catch (error) {
@@ -1231,12 +1231,6 @@ async function run() {
 
   figma.ui.onmessage = async (message) => {
     if (!message || typeof message !== "object") {
-      return;
-    }
-
-    if (message.type === "close") {
-      clearWatchNodes();
-      figma.closePlugin();
       return;
     }
 

@@ -1193,7 +1193,7 @@
       try {
         figma.showUI(__html__, {
           width: 360,
-          height: 560,
+          height: 740,
           themeColors: false
         });
       } catch (error) {
@@ -1207,11 +1207,6 @@
       postUiStatus("\u0412\u044B\u0434\u0435\u043B\u0438\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.", "info");
       figma.ui.onmessage = (message) => __async(null, null, function* () {
         if (!message || typeof message !== "object") {
-          return;
-        }
-        if (message.type === "close") {
-          clearWatchNodes();
-          figma.closePlugin();
           return;
         }
         if (message.type === "request-settings") {
