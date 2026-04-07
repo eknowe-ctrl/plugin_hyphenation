@@ -1193,7 +1193,7 @@
       try {
         figma.showUI(__html__, {
           width: 360,
-          height: 740,
+          height: 700,
           themeColors: false
         });
       } catch (error) {
