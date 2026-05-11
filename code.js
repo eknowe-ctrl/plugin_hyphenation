@@ -564,7 +564,7 @@
           const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
           const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
           if (linePrefix.length > 0) {
-            const lineFillRatio = measureWidth(linePrefix) / maxWidth;
+            const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
             const isLineSparse = lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
             let breakPoint2 = null;
             if (!reachedParagraphLimit || isLineSparse) {
@@ -577,7 +577,7 @@
             }
             if (!breakPoint2 && isLineSparse) {
               breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, __spreadProps(__spreadValues({}, options), {
-                hyphenationIntensity: "aggressive"
+                hyphenationIntensity: "soft"
               }));
             }
             if (breakPoint2) {

@@ -481,7 +481,8 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
         const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
 
         if (linePrefix.length > 0) {
-          const lineFillRatio = measureWidth(linePrefix) / maxWidth;
+          // Use already-computed remainingWidth to avoid extra measureWidth call.
+          const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
           const isLineSparse =
             lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
 
@@ -496,11 +497,13 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             );
           }
 
-          // If normal intensity found nothing and the line is sparse, try aggressive.
+          // Fallback to "soft" intensity: it allows long-fragment breaks (shortFragment >= 3)
+          // that "normal" and "aggressive" modes skip. For sparse lines this finds better
+          // break positions than aggressive (which requires 1-char fragments).
           if (!breakPoint && isLineSparse) {
             breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
               ...options,
-              hyphenationIntensity: "aggressive"
+              hyphenationIntensity: "soft"
             });
           }
 
