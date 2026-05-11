@@ -60,6 +60,7 @@ const ORPHAN_WORDS = new Set([
 const DEFAULT_SETTINGS = {
   autoWatch: true,
   preventOrphans: true,
+  autoNbsp: true,
   hangingHyphen: true,
   optimizeLetterSpacing: true,
   minWordLengthForHyphenation: 5,
@@ -104,6 +105,8 @@ function normalizeSettings(input) {
     typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
   const preventOrphans =
     typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
+  const autoNbsp =
+    typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
   const hangingHyphen =
     typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
   const optimizeLetterSpacing =
@@ -151,6 +154,7 @@ function normalizeSettings(input) {
   return {
     autoWatch,
     preventOrphans,
+    autoNbsp,
     hangingHyphen,
     optimizeLetterSpacing,
     minWordLengthForHyphenation,
@@ -187,7 +191,11 @@ async function persistRuntimeSettings() {
 }
 
 function normalizeTextForRehyphenation(text) {
-  return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
+  return text
+    .replace(/\u00AD/g, "")
+    .replace(/-\u200B/g, "")
+    .replace(/\u200B/g, "")
+    .replace(/\u00A0/g, " ");
 }
 
 function resetHyphenationText(text) {
@@ -200,6 +208,47 @@ function resetHyphenationText(text) {
       return `${prefix}${word} `;
     }
   );
+}
+
+// Patterns for automatic non-breaking spaces (longest alternatives first to
+// prevent shorter ones from shadowing, e.g. "км" before "м").
+const NBSP_UNITS_RE = new RegExp(
+  "(\\d+(?:[,.]\\d+)?)[^\\S\\n]+" +
+  "(млрд|млн|тыс" +
+  "|мкг|мг|кг" +
+  "|мкм|нм|пм|км|дм|см|мм" +
+  "|мл|дл|кл" +
+  "|га" +
+  "|ТГц|ГГц|МГц|кГц|Гц" +
+  "|МВт|кВт|мВт|Вт" +
+  "|МВ|кВ|мВ|В" +
+  "|мкА|мА|А" +
+  "|МОм|кОм|Ом" +
+  "|МДж|кДж|Дж|ккал|кал" +
+  "|ГПа|МПа|кПа|Па|атм|бар" +
+  "|мкс|нс|мс|мин" +
+  "|руб|коп" +
+  "|шт|ед|экз" +
+  "|г|м|л|А|ч" +
+  ")\\b",
+  "g"
+);
+const NBSP_PERCENT_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+([%₽€$])/g;
+const NBSP_TEMP_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+(°[CFK]?)/g;
+const NBSP_MONTHS_RE = /(\d{1,2})[^\S\n]+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\b/gi;
+const NBSP_YEAR_RE = /(\d+)[^\S\n]+(году?|год(?:а|ов)?|лет)\b/g;
+const NBSP_INITIALS_RE = /([А-ЯЁA-Z])\.[^\S\n]+(?=[А-ЯЁA-Za-яёа-я])/g;
+const NBSP_ADDR_RE = /\b(проф|акад|доц|тов|ул|пр|пл|пос|им|кв|оз|г|д|р|о|с)\.[^\S\n]+(?=[А-ЯЁ0-9])/gi;
+
+function applyNonBreakingSpaces(text) {
+  return text
+    .replace(NBSP_MONTHS_RE,  `$1 $2`)
+    .replace(NBSP_YEAR_RE,    `$1 $2`)
+    .replace(NBSP_PERCENT_RE, `$1 $2`)
+    .replace(NBSP_TEMP_RE,    `$1 $2`)
+    .replace(NBSP_UNITS_RE,   `$1 $2`)
+    .replace(NBSP_INITIALS_RE, `$1. `)
+    .replace(NBSP_ADDR_RE,     `$1. `);
 }
 
 function preventRussianOrphans(text) {
@@ -926,6 +975,10 @@ async function processTextNodes(textNodes, mode, settings) {
         let preparedText = settings.preventOrphans
           ? preventRussianOrphans(cleanOriginal)
           : cleanOriginal;
+
+        if (settings.autoNbsp) {
+          preparedText = applyNonBreakingSpaces(preparedText);
+        }
 
         if (settings.optimizeLetterSpacing && !mixedTypography) {
           const currentSpacing = getNodeLetterSpacing(node);

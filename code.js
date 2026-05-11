@@ -227,6 +227,7 @@
   var DEFAULT_SETTINGS = {
     autoWatch: true,
     preventOrphans: true,
+    autoNbsp: true,
     hangingHyphen: true,
     optimizeLetterSpacing: true,
     minWordLengthForHyphenation: 5,
@@ -264,6 +265,7 @@
     const src = input && typeof input === "object" ? input : {};
     const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
     const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
+    const autoNbsp = typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
     const hangingHyphen = typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
     const optimizeLetterSpacing = typeof src.optimizeLetterSpacing === "boolean" ? src.optimizeLetterSpacing : DEFAULT_SETTINGS.optimizeLetterSpacing;
     const minWordLengthForHyphenation = clampNumber(
@@ -312,6 +314,7 @@
     return {
       autoWatch,
       preventOrphans,
+      autoNbsp,
       hangingHyphen,
       optimizeLetterSpacing,
       minWordLengthForHyphenation,
@@ -349,7 +352,7 @@
     });
   }
   function normalizeTextForRehyphenation(text) {
-    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
+    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "").replace(/\u00A0/g, " ");
   }
   function resetHyphenationText(text) {
     return normalizeTextForRehyphenation(text).replace(
@@ -361,6 +364,19 @@
         return `${prefix}${word} `;
       }
     );
+  }
+  var NBSP_UNITS_RE = new RegExp(
+    "(\\d+(?:[,.]\\d+)?)[^\\S\\n]+(\u043C\u043B\u0440\u0434|\u043C\u043B\u043D|\u0442\u044B\u0441|\u043C\u043A\u0433|\u043C\u0433|\u043A\u0433|\u043C\u043A\u043C|\u043D\u043C|\u043F\u043C|\u043A\u043C|\u0434\u043C|\u0441\u043C|\u043C\u043C|\u043C\u043B|\u0434\u043B|\u043A\u043B|\u0433\u0430|\u0422\u0413\u0446|\u0413\u0413\u0446|\u041C\u0413\u0446|\u043A\u0413\u0446|\u0413\u0446|\u041C\u0412\u0442|\u043A\u0412\u0442|\u043C\u0412\u0442|\u0412\u0442|\u041C\u0412|\u043A\u0412|\u043C\u0412|\u0412|\u043C\u043A\u0410|\u043C\u0410|\u0410|\u041C\u041E\u043C|\u043A\u041E\u043C|\u041E\u043C|\u041C\u0414\u0436|\u043A\u0414\u0436|\u0414\u0436|\u043A\u043A\u0430\u043B|\u043A\u0430\u043B|\u0413\u041F\u0430|\u041C\u041F\u0430|\u043A\u041F\u0430|\u041F\u0430|\u0430\u0442\u043C|\u0431\u0430\u0440|\u043C\u043A\u0441|\u043D\u0441|\u043C\u0441|\u043C\u0438\u043D|\u0440\u0443\u0431|\u043A\u043E\u043F|\u0448\u0442|\u0435\u0434|\u044D\u043A\u0437|\u0433|\u043C|\u043B|\u0410|\u0447)\\b",
+    "g"
+  );
+  var NBSP_PERCENT_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+([%₽€$])/g;
+  var NBSP_TEMP_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+(°[CFK]?)/g;
+  var NBSP_MONTHS_RE = /(\d{1,2})[^\S\n]+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\b/gi;
+  var NBSP_YEAR_RE = /(\d+)[^\S\n]+(году?|год(?:а|ов)?|лет)\b/g;
+  var NBSP_INITIALS_RE = /([А-ЯЁA-Z])\.[^\S\n]+(?=[А-ЯЁA-Za-яёа-я])/g;
+  var NBSP_ADDR_RE = /\b(проф|акад|доц|тов|ул|пр|пл|пос|им|кв|оз|г|д|р|о|с)\.[^\S\n]+(?=[А-ЯЁ0-9])/gi;
+  function applyNonBreakingSpaces(text) {
+    return text.replace(NBSP_MONTHS_RE, `$1\xA0$2`).replace(NBSP_YEAR_RE, `$1\xA0$2`).replace(NBSP_PERCENT_RE, `$1\xA0$2`).replace(NBSP_TEMP_RE, `$1\xA0$2`).replace(NBSP_UNITS_RE, `$1\xA0$2`).replace(NBSP_INITIALS_RE, `$1.\xA0`).replace(NBSP_ADDR_RE, `$1.\xA0`);
   }
   function preventRussianOrphans(text) {
     return text.replace(
@@ -942,6 +958,9 @@
           } else {
             const mixedTypography = hasMixedTypography(node);
             let preparedText = settings.preventOrphans ? preventRussianOrphans(cleanOriginal) : cleanOriginal;
+            if (settings.autoNbsp) {
+              preparedText = applyNonBreakingSpaces(preparedText);
+            }
             if (settings.optimizeLetterSpacing && !mixedTypography) {
               const currentSpacing = getNodeLetterSpacing(node);
               const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);

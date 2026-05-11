@@ -333,6 +333,13 @@
       </label>
     </div>
     <div class="toggle-row">
+      <span class="label-text">Авто неразрывные пробелы</span>
+      <label class="switch">
+        <input type="checkbox" id="autoNbsp" />
+        <span class="track"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
       <span class="label-text">Висячий дефис</span>
       <label class="switch">
         <input type="checkbox" id="hangingHyphen" />
@@ -421,6 +428,7 @@
   var toggleFields = {
     autoWatch:             document.getElementById('autoWatch'),
     preventOrphans:        document.getElementById('preventOrphans'),
+    autoNbsp:              document.getElementById('autoNbsp'),
     hangingHyphen:         document.getElementById('hangingHyphen'),
     optimizeLetterSpacing: document.getElementById('optimizeLetterSpacing')
   };
@@ -453,6 +461,7 @@
     return {
       autoWatch:             toggleFields.autoWatch.checked,
       preventOrphans:        toggleFields.preventOrphans.checked,
+      autoNbsp:              toggleFields.autoNbsp.checked,
       hangingHyphen:         toggleFields.hangingHyphen.checked,
       optimizeLetterSpacing: toggleFields.optimizeLetterSpacing.checked,
       minWordLengthForHyphenation: Number(numFields.minWordLengthForHyphenation.value) || 5,
