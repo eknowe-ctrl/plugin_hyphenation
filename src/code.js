@@ -13,6 +13,7 @@ const HYPHENATION_INTENSITY_ORDER = {
   aggressive: 2
 };
 const WIDTH_EPSILON = 0.01;
+const SPARSE_LINE_FILL_THRESHOLD = 0.75;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
 const SELF_CHANGE_SUPPRESS_MS = 600;
@@ -88,7 +89,19 @@ const ORPHAN_WORDS = new Set([
   "ни",
   "но",
   "да",
-  "об"
+  "об",
+  "во",
+  "ко",
+  "же",
+  "ли",
+  "бы",
+  "то",
+  "при",
+  "для",
+  "под",
+  "над",
+  "без",
+  "или"
 ]);
 
 const DEFAULT_SETTINGS = {
@@ -378,7 +391,7 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
   const core = match[2];
   const trailing = match[3];
 
-  if (core.length < minWordLength || core.includes("-")) {
+  if (core.length < minWordLength) {
     return null;
   }
 
@@ -468,14 +481,28 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
         const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
 
         if (linePrefix.length > 0) {
-          const breakPoint = reachedParagraphLimit
-            ? null
-            : findBestBreakInToken(
-                chunk,
-                remainingWidth,
-                measureWidth,
-                options
-              );
+          const lineFillRatio = measureWidth(linePrefix) / maxWidth;
+          const isLineSparse =
+            lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+
+          // Sparse lines override the paragraph hyphen limit to reduce large gaps.
+          let breakPoint = null;
+          if (!reachedParagraphLimit || isLineSparse) {
+            breakPoint = findBestBreakInToken(
+              chunk,
+              remainingWidth,
+              measureWidth,
+              options
+            );
+          }
+
+          // If normal intensity found nothing and the line is sparse, try aggressive.
+          if (!breakPoint && isLineSparse) {
+            breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
+              ...options,
+              hyphenationIntensity: "aggressive"
+            });
+          }
 
           if (breakPoint) {
             result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
@@ -671,15 +698,19 @@ function createCloneWidthMeasurer(node, letterSpacing) {
   probe.y = -100000;
   probe.textAutoResize = "WIDTH_AND_HEIGHT";
 
-  if (letterSpacing) {
+  let cache = new Map();
+
+  function applyLetterSpacing(spacing) {
+    if (!spacing) return;
     try {
-      probe.letterSpacing = letterSpacing;
+      probe.letterSpacing = spacing;
     } catch (error) {
       // Для смешанной типографики не всегда можно выставить единый letter spacing.
     }
   }
 
-  const cache = new Map();
+  applyLetterSpacing(letterSpacing);
+
   const measure = (text) => {
     if (!text || text.length === 0) {
       return 0;
@@ -698,6 +729,10 @@ function createCloneWidthMeasurer(node, letterSpacing) {
 
   return {
     measure,
+    setLetterSpacing(spacing) {
+      applyLetterSpacing(spacing);
+      cache = new Map();
+    },
     destroy() {
       probe.remove();
     }
@@ -965,9 +1000,10 @@ async function processTextNodes(textNodes, mode, settings) {
           let bestDesiredPenalty = Number.POSITIVE_INFINITY;
           let bestCurrentPenalty = Number.POSITIVE_INFINITY;
 
-          for (const candidate of candidates) {
-            const measurer = createWidthMeasurer(node, candidate.letterSpacing);
-            try {
+          const measurer = createWidthMeasurer(node);
+          try {
+            for (const candidate of candidates) {
+              measurer.setLetterSpacing(candidate.letterSpacing);
               const candidateText = hyphenateRussianTextWithVisibleDash(
                 preparedText,
                 node.width,
@@ -995,9 +1031,9 @@ async function processTextNodes(textNodes, mode, settings) {
                 bestText = candidateText;
                 bestSpacing = candidate.letterSpacing;
               }
-            } finally {
-              measurer.destroy();
             }
+          } finally {
+            measurer.destroy();
           }
 
           transformed = bestText;
@@ -1006,6 +1042,9 @@ async function processTextNodes(textNodes, mode, settings) {
             hasNodeChanges = true;
           }
         } else {
+          if (settings.optimizeLetterSpacing && mixedTypography) {
+            skippedMixedTypography += 1;
+          }
           const measurer = createWidthMeasurer(node);
           try {
             transformed = hyphenateRussianTextWithVisibleDash(
@@ -1213,6 +1252,8 @@ async function handleAction(mode) {
     postUiDebug(null);
   } finally {
     manualActionInProgress = false;
+    // Продлеваем окно подавления: Figma может сгенерировать documentchange
+    // с задержкой после завершения async-записи в документ.
     suppressOwnDocumentChanges();
     setUiLoading(false);
 

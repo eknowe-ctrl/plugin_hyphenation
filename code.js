@@ -183,6 +183,7 @@
     aggressive: 2
   };
   var WIDTH_EPSILON = 0.01;
+  var SPARSE_LINE_FILL_THRESHOLD = 0.75;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
   var SELF_CHANGE_SUPPRESS_MS = 600;
@@ -256,7 +257,19 @@
     "\u043D\u0438",
     "\u043D\u043E",
     "\u0434\u0430",
-    "\u043E\u0431"
+    "\u043E\u0431",
+    "\u0432\u043E",
+    "\u043A\u043E",
+    "\u0436\u0435",
+    "\u043B\u0438",
+    "\u0431\u044B",
+    "\u0442\u043E",
+    "\u043F\u0440\u0438",
+    "\u0434\u043B\u044F",
+    "\u043F\u043E\u0434",
+    "\u043D\u0430\u0434",
+    "\u0431\u0435\u0437",
+    "\u0438\u043B\u0438"
   ]);
   var DEFAULT_SETTINGS = __spreadValues({
     preset: "interface"
@@ -489,7 +502,7 @@
     const leading = match[1];
     const core = match[2];
     const trailing = match[3];
-    if (core.length < minWordLength || core.includes("-")) {
+    if (core.length < minWordLength) {
       return null;
     }
     const parts = hypher.hyphenate(core);
@@ -551,12 +564,22 @@
           const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
           const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
           if (linePrefix.length > 0) {
-            const breakPoint2 = reachedParagraphLimit ? null : findBestBreakInToken(
-              chunk,
-              remainingWidth,
-              measureWidth,
-              options
-            );
+            const lineFillRatio = measureWidth(linePrefix) / maxWidth;
+            const isLineSparse = lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+            let breakPoint2 = null;
+            if (!reachedParagraphLimit || isLineSparse) {
+              breakPoint2 = findBestBreakInToken(
+                chunk,
+                remainingWidth,
+                measureWidth,
+                options
+              );
+            }
+            if (!breakPoint2 && isLineSparse) {
+              breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, __spreadProps(__spreadValues({}, options), {
+                hyphenationIntensity: "aggressive"
+              }));
+            }
             if (breakPoint2) {
               result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
               insertedBreaks += 1;
@@ -719,13 +742,15 @@
     probe.x = -1e5;
     probe.y = -1e5;
     probe.textAutoResize = "WIDTH_AND_HEIGHT";
-    if (letterSpacing) {
+    let cache = /* @__PURE__ */ new Map();
+    function applyLetterSpacing(spacing) {
+      if (!spacing) return;
       try {
-        probe.letterSpacing = letterSpacing;
+        probe.letterSpacing = spacing;
       } catch (error) {
       }
     }
-    const cache = /* @__PURE__ */ new Map();
+    applyLetterSpacing(letterSpacing);
     const measure = (text) => {
       if (!text || text.length === 0) {
         return 0;
@@ -741,6 +766,10 @@
     };
     return {
       measure,
+      setLetterSpacing(spacing) {
+        applyLetterSpacing(spacing);
+        cache = /* @__PURE__ */ new Map();
+      },
       destroy() {
         probe.remove();
       }
@@ -971,9 +1000,10 @@
               let bestBreakCount = Number.POSITIVE_INFINITY;
               let bestDesiredPenalty = Number.POSITIVE_INFINITY;
               let bestCurrentPenalty = Number.POSITIVE_INFINITY;
-              for (const candidate of candidates) {
-                const measurer = createWidthMeasurer(node, candidate.letterSpacing);
-                try {
+              const measurer = createWidthMeasurer(node);
+              try {
+                for (const candidate of candidates) {
+                  measurer.setLetterSpacing(candidate.letterSpacing);
                   const candidateText = hyphenateRussianTextWithVisibleDash(
                     preparedText,
                     node.width,
@@ -994,9 +1024,9 @@
                     bestText = candidateText;
                     bestSpacing = candidate.letterSpacing;
                   }
-                } finally {
-                  measurer.destroy();
                 }
+              } finally {
+                measurer.destroy();
               }
               transformed = bestText;
               if (!sameLetterSpacing(bestSpacing, currentSpacing)) {
@@ -1004,6 +1034,9 @@
                 hasNodeChanges = true;
               }
             } else {
+              if (settings.optimizeLetterSpacing && mixedTypography) {
+                skippedMixedTypography += 1;
+              }
               const measurer = createWidthMeasurer(node);
               try {
                 transformed = hyphenateRussianTextWithVisibleDash(
