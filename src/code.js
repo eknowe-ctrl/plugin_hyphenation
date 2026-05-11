@@ -191,23 +191,23 @@ async function persistRuntimeSettings() {
 }
 
 function normalizeTextForRehyphenation(text) {
+  // Strips only plugin markers. Preserves \u00A0 so that preventRussianOrphans
+  // and applyNonBreakingSpaces survive inside hyphenateRussianTextWithVisibleDash.
   return text
     .replace(/\u00AD/g, "")
     .replace(/-\u200B/g, "")
-    .replace(/\u200B/g, "")
-    .replace(/\u00A0/g, " ");
+    .replace(/\u200B/g, "");
+}
+
+// Full clean: plugin markers + all NBSP -> regular spaces.
+// Used for snapshots and reset so repeated Apply is idempotent
+// and old snapshots (that may contain markers) are handled correctly.
+function normalizeToCleanText(text) {
+  return normalizeTextForRehyphenation(text).replace(/\u00A0/g, " ");
 }
 
 function resetHyphenationText(text) {
-  return normalizeTextForRehyphenation(text).replace(
-    /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
-    (match, prefix, word) => {
-      if (!ORPHAN_WORDS.has(word.toLowerCase())) {
-        return match;
-      }
-      return `${prefix}${word} `;
-    }
-  );
+  return normalizeToCleanText(text);
 }
 
 // Patterns for automatic non-breaking spaces (longest alternatives first to
@@ -554,9 +554,13 @@ function restoreFromSnapshot(node) {
     return false;
   }
 
+  // normalizeToCleanText strips any plugin markers that old buggy snapshots
+  // may have stored (hyphens, NBSP). New snapshots are already clean.
+  const cleanText = normalizeToCleanText(snapshot.text);
+
   let changed = false;
-  if (node.characters !== snapshot.text) {
-    node.characters = snapshot.text;
+  if (node.characters !== cleanText) {
+    node.characters = cleanText;
     changed = true;
   }
 
@@ -958,7 +962,7 @@ async function processTextNodes(textNodes, mode, settings) {
         : getNodeLetterSpacing(node);
 
       // Always snapshot the normalised text so old plugin markers are stripped.
-      const cleanOriginal = normalizeTextForRehyphenation(original);
+      const cleanOriginal = normalizeToCleanText(original);
 
       let transformed = original;
       let hasNodeChanges = false;

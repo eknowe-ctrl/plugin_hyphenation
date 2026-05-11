@@ -352,18 +352,13 @@
     });
   }
   function normalizeTextForRehyphenation(text) {
-    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "").replace(/\u00A0/g, " ");
+    return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
+  }
+  function normalizeToCleanText(text) {
+    return normalizeTextForRehyphenation(text).replace(/\u00A0/g, " ");
   }
   function resetHyphenationText(text) {
-    return normalizeTextForRehyphenation(text).replace(
-      /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
-      (match, prefix, word) => {
-        if (!ORPHAN_WORDS.has(word.toLowerCase())) {
-          return match;
-        }
-        return `${prefix}${word} `;
-      }
-    );
+    return normalizeToCleanText(text);
   }
   var NBSP_UNITS_RE = new RegExp(
     "(\\d+(?:[,.]\\d+)?)[^\\S\\n]+(\u043C\u043B\u0440\u0434|\u043C\u043B\u043D|\u0442\u044B\u0441|\u043C\u043A\u0433|\u043C\u0433|\u043A\u0433|\u043C\u043A\u043C|\u043D\u043C|\u043F\u043C|\u043A\u043C|\u0434\u043C|\u0441\u043C|\u043C\u043C|\u043C\u043B|\u0434\u043B|\u043A\u043B|\u0433\u0430|\u0422\u0413\u0446|\u0413\u0413\u0446|\u041C\u0413\u0446|\u043A\u0413\u0446|\u0413\u0446|\u041C\u0412\u0442|\u043A\u0412\u0442|\u043C\u0412\u0442|\u0412\u0442|\u041C\u0412|\u043A\u0412|\u043C\u0412|\u0412|\u043C\u043A\u0410|\u043C\u0410|\u0410|\u041C\u041E\u043C|\u043A\u041E\u043C|\u041E\u043C|\u041C\u0414\u0436|\u043A\u0414\u0436|\u0414\u0436|\u043A\u043A\u0430\u043B|\u043A\u0430\u043B|\u0413\u041F\u0430|\u041C\u041F\u0430|\u043A\u041F\u0430|\u041F\u0430|\u0430\u0442\u043C|\u0431\u0430\u0440|\u043C\u043A\u0441|\u043D\u0441|\u043C\u0441|\u043C\u0438\u043D|\u0440\u0443\u0431|\u043A\u043E\u043F|\u0448\u0442|\u0435\u0434|\u044D\u043A\u0437|\u0433|\u043C|\u043B|\u0410|\u0447)\\b",
@@ -606,9 +601,10 @@
     if (!snapshot) {
       return false;
     }
+    const cleanText = normalizeToCleanText(snapshot.text);
     let changed = false;
-    if (node.characters !== snapshot.text) {
-      node.characters = snapshot.text;
+    if (node.characters !== cleanText) {
+      node.characters = cleanText;
       changed = true;
     }
     if (snapshot.letterSpacing && !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node))) {
@@ -946,7 +942,7 @@
           const original = node.characters;
           const existingSnapshot = readNodeSnapshot(node);
           const originalLetterSpacing = existingSnapshot && existingSnapshot.letterSpacing ? existingSnapshot.letterSpacing : getNodeLetterSpacing(node);
-          const cleanOriginal = normalizeTextForRehyphenation(original);
+          const cleanOriginal = normalizeToCleanText(original);
           let transformed = original;
           let hasNodeChanges = false;
           if (isResetMode) {
