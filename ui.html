@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Russian Hyphenation</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        background: #f7f8fb;
+        color: #1f2937;
+      }
+
+      .panel {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        padding: 12px 14px 8px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #ffffff;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .subtitle {
+        margin: 6px 0 0;
+        font-size: 11px;
+        color: #6b7280;
+      }
+
+      .content {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 14px 8px;
+      }
+
+      .footer {
+        padding: 7px 16px 10px;
+        font-size: 11px;
+        color: #9ca3af;
+        text-align: center;
+        border-top: 1px solid #e5e7eb;
+        background: #ffffff;
+      }
+
+      .section {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 9px;
+      }
+
+      .section h3 {
+        margin: 0 0 8px;
+        font-size: 12px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .section-head h3 {
+        margin: 0;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 5px 0;
+        font-size: 11px;
+      }
+
+      .row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      select,
+      input[type="number"] {
+        width: 112px;
+        height: 28px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        padding: 4px 8px;
+        background: #ffffff;
+        font-size: 11px;
+      }
+
+      input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .actions button {
+        height: 32px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      #apply-button {
+        background: #111827;
+        color: #ffffff;
+      }
+
+      #reset-button {
+        border-color: #9ca3af;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .status {
+        margin-top: 8px;
+        font-size: 11px;
+        line-height: 1.35;
+        color: #374151;
+        min-height: 30px;
+      }
+
+      .status[data-kind="error"] {
+        color: #b91c1c;
+      }
+
+      .status[data-kind="success"] {
+        color: #065f46;
+      }
+
+      .debug-list {
+        margin: 0;
+        padding-left: 16px;
+        font-size: 10.5px;
+        line-height: 1.35;
+        max-height: 84px;
+        overflow: auto;
+      }
+
+      .debug-meta {
+        font-size: 10.5px;
+        color: #4b5563;
+        margin-bottom: 6px;
+      }
+
+      .ghost-button {
+        height: 24px;
+        min-width: 76px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 10.5px;
+        cursor: pointer;
+        padding: 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <header class="header">
+        <h1 class="title">Русские переносы</h1>
+        <p class="subtitle">Настройки сохраняются между запусками плагина</p>
+      </header>
+
+      <div class="content">
+        <section class="section">
+          <h3>Профиль типографики</h3>
+          <div class="row">
+            <span>Профиль</span>
+            <select id="preset">
+              <option value="interface">Интерфейс</option>
+              <option value="book">Книга</option>
+              <option value="dense">Плотно</option>
+              <option value="custom">Свой</option>
+            </select>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="autoWatch" /> Автопересчёт по ширине</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="preventOrphans" /> Анти-висячие предлоги</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="hangingHyphen" /> Висячий дефис</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="optimizeLetterSpacing" /> Опт. межбукв.</label>
+          </div>
+          <div class="row">
+            <span>Режим переноса</span>
+            <select id="hyphenationIntensity">
+              <option value="soft">Мягкий</option>
+              <option value="normal">Нормальный</option>
+              <option value="aggressive">Агрессивный</option>
+            </select>
+          </div>
+          <div class="row">
+            <span>Мин. длина слова</span>
+            <input id="minWordLengthForHyphenation" type="number" min="4" max="12" step="1" />
+          </div>
+          <div class="row">
+            <span>Макс. переносов/абзац</span>
+            <input id="maxHyphensPerParagraph" type="number" min="0" max="20" step="1" />
+          </div>
+        </section>
+
+        <section class="section">
+          <h3>Межбукв. интервал (%)</h3>
+          <div class="row">
+            <span>Мин.</span>
+            <input id="lsMin" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Цель</span>
+            <input id="lsDesired" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Макс.</span>
+            <input id="lsMax" type="number" step="0.1" />
+          </div>
+          <div class="row">
+            <span>Шаг</span>
+            <input id="lsStep" type="number" min="0.1" step="0.1" />
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h3>Диагностика</h3>
+            <button
+              id="debug-toggle"
+              class="ghost-button"
+              type="button"
+              aria-expanded="false"
+            >
+              Показать
+            </button>
+          </div>
+          <div id="debug-body" hidden>
+            <div class="debug-meta" id="debug-meta">Нет данных</div>
+            <ul class="debug-list" id="debug-list"></ul>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="actions">
+            <button id="apply-button">Применить</button>
+            <button id="reset-button">Сбросить</button>
+          </div>
+          <div class="status" id="status" aria-live="polite"></div>
+        </section>
+      </div>
+      <footer class="footer">by Eugeny Leshchenko</footer>
+    </main>
+
+    <script>
+      var applyButton = document.getElementById("apply-button");
+      var resetButton = document.getElementById("reset-button");
+      var presetSelect = document.getElementById("preset");
+      var statusNode = document.getElementById("status");
+      var debugMeta = document.getElementById("debug-meta");
+      var debugList = document.getElementById("debug-list");
+      var debugToggle = document.getElementById("debug-toggle");
+      var debugBody = document.getElementById("debug-body");
+      var MIN_UI_HEIGHT = 720;
+      var MAX_UI_HEIGHT = 980;
+
+      var fields = {
+        autoWatch: document.getElementById("autoWatch"),
+        preventOrphans: document.getElementById("preventOrphans"),
+        hangingHyphen: document.getElementById("hangingHyphen"),
+        optimizeLetterSpacing: document.getElementById("optimizeLetterSpacing"),
+        hyphenationIntensity: document.getElementById("hyphenationIntensity"),
+        minWordLengthForHyphenation: document.getElementById("minWordLengthForHyphenation"),
+        maxHyphensPerParagraph: document.getElementById("maxHyphensPerParagraph"),
+        letterSpacingMinPercent: document.getElementById("lsMin"),
+        letterSpacingDesiredPercent: document.getElementById("lsDesired"),
+        letterSpacingMaxPercent: document.getElementById("lsMax"),
+        letterSpacingStepPercent: document.getElementById("lsStep")
+      };
+
+      function send(type, payload) {
+        var extra = payload || {};
+        var pluginMessage = { type: type };
+        for (var key in extra) {
+          if (Object.prototype.hasOwnProperty.call(extra, key)) {
+            pluginMessage[key] = extra[key];
+          }
+        }
+        parent.postMessage({ pluginMessage: pluginMessage }, "*");
+      }
+
+      function setLoading(isLoading) {
+        applyButton.disabled = isLoading;
+        resetButton.disabled = isLoading;
+      }
+
+      function updateStatus(message, kind) {
+        statusNode.textContent = message || "";
+        statusNode.setAttribute("data-kind", kind || "");
+        requestUiResize();
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function requestUiResize() {
+        var targetHeight = Math.ceil(document.documentElement.scrollHeight);
+        send("resize-ui", {
+          height: clamp(targetHeight, MIN_UI_HEIGHT, MAX_UI_HEIGHT)
+        });
+      }
+
+      function setDebugExpanded(isExpanded) {
+        debugBody.hidden = !isExpanded;
+        debugToggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+        debugToggle.textContent = isExpanded ? "Скрыть" : "Показать";
+        requestUiResize();
+      }
+
+      function setNumeric(input, value) {
+        input.value = isFinite(value) ? String(value) : "0";
+      }
+
+      function renderSettings(settings) {
+        if (!settings) {
+          return;
+        }
+        presetSelect.value = settings.preset || "custom";
+        fields.autoWatch.checked = Boolean(settings.autoWatch);
+        fields.preventOrphans.checked = Boolean(settings.preventOrphans);
+        fields.hangingHyphen.checked = Boolean(settings.hangingHyphen);
+        fields.optimizeLetterSpacing.checked = Boolean(settings.optimizeLetterSpacing);
+        fields.hyphenationIntensity.value = settings.hyphenationIntensity || "normal";
+        setNumeric(
+          fields.minWordLengthForHyphenation,
+          Number(settings.minWordLengthForHyphenation)
+        );
+        setNumeric(
+          fields.maxHyphensPerParagraph,
+          Number(settings.maxHyphensPerParagraph)
+        );
+        setNumeric(fields.letterSpacingMinPercent, Number(settings.letterSpacingMinPercent));
+        setNumeric(fields.letterSpacingDesiredPercent, Number(settings.letterSpacingDesiredPercent));
+        setNumeric(fields.letterSpacingMaxPercent, Number(settings.letterSpacingMaxPercent));
+        setNumeric(fields.letterSpacingStepPercent, Number(settings.letterSpacingStepPercent));
+      }
+
+      function collectManualSettings() {
+        return {
+          autoWatch: fields.autoWatch.checked,
+          preventOrphans: fields.preventOrphans.checked,
+          hangingHyphen: fields.hangingHyphen.checked,
+          optimizeLetterSpacing: fields.optimizeLetterSpacing.checked,
+          hyphenationIntensity: fields.hyphenationIntensity.value,
+          minWordLengthForHyphenation: Number(fields.minWordLengthForHyphenation.value),
+          maxHyphensPerParagraph: Number(fields.maxHyphensPerParagraph.value),
+          letterSpacingMinPercent: Number(fields.letterSpacingMinPercent.value),
+          letterSpacingDesiredPercent: Number(fields.letterSpacingDesiredPercent.value),
+          letterSpacingMaxPercent: Number(fields.letterSpacingMaxPercent.value),
+          letterSpacingStepPercent: Number(fields.letterSpacingStepPercent.value)
+        };
+      }
+
+      function renderDebug(debug) {
+        if (!debug) {
+          debugMeta.textContent = "Нет данных";
+          debugList.innerHTML = "";
+          return;
+        }
+
+        debugMeta.textContent =
+          "режим: " +
+          debug.mode +
+          ", изменено: " +
+          debug.changedNodes +
+          "/" +
+          debug.totalNodes +
+          ", пропущено: " +
+          debug.skippedNodes;
+        debugList.innerHTML = "";
+
+        if (!Array.isArray(debug.skippedReasons) || debug.skippedReasons.length === 0) {
+          return;
+        }
+
+        for (var i = 0; i < debug.skippedReasons.length; i += 1) {
+          var item = debug.skippedReasons[i];
+          var li = document.createElement("li");
+          var name = item.nodeName || item.nodeId || "без имени";
+          li.textContent = name + ": " + item.reason;
+          debugList.appendChild(li);
+        }
+      }
+
+      applyButton.addEventListener("click", function () {
+        send("apply");
+      });
+      resetButton.addEventListener("click", function () {
+        send("reset");
+      });
+      debugToggle.addEventListener("click", function () {
+        setDebugExpanded(debugBody.hidden);
+      });
+
+      presetSelect.addEventListener("change", function () {
+        if (presetSelect.value === "custom") {
+          return;
+        }
+        send("select-preset", { preset: presetSelect.value });
+      });
+
+      for (var fieldKey in fields) {
+        if (!Object.prototype.hasOwnProperty.call(fields, fieldKey)) {
+          continue;
+        }
+        fields[fieldKey].addEventListener("change", function () {
+          send("save-settings", {
+            settings: collectManualSettings()
+          });
+        });
+      }
+
+      window.onmessage = function (event) {
+        var message = event.data.pluginMessage;
+        if (!message || typeof message !== "object") {
+          return;
+        }
+
+        if (message.type === "loading") {
+          setLoading(Boolean(message.isLoading));
+        }
+
+        if (message.type === "status") {
+          updateStatus(message.message, message.kind);
+        }
+
+        if (message.type === "settings") {
+          renderSettings(message.settings);
+        }
+
+        if (message.type === "debug") {
+          renderDebug(message.debug);
+        }
+      };
+
+      setDebugExpanded(false);
+      send("request-settings");
+      setTimeout(requestUiResize, 0);
+    </script>
+  </body>
+</html>
