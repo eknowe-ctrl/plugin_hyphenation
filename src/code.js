@@ -357,17 +357,22 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
 
 function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
   const normalized = normalizeTextForRehyphenation(text);
-  const lines = normalized.split("\n");
+  const paragraphs = normalized.split("\n");
   const maxHyphensPerParagraph =
     options && typeof options.maxHyphensPerParagraph === "number"
       ? options.maxHyphensPerParagraph
       : 0;
 
-  const transformedLines = lines.map((line) => {
+  let totalBreakCount = 0;
+  let totalUnsolvedSparseLines = 0;
+  const transformedParagraphs = [];
+
+  for (const line of paragraphs) {
     const tokens = line.match(TOKEN_REGEX);
 
     if (!tokens) {
-      return line;
+      transformedParagraphs.push(line);
+      continue;
     }
 
     let result = "";
@@ -398,12 +403,10 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
         const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
 
         if (linePrefix.length > 0) {
-          // Use already-computed remainingWidth to avoid extra measureWidth call.
           const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
           const isLineSparse =
             lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
 
-          // Sparse lines override the paragraph hyphen limit to reduce large gaps.
           let breakPoint = null;
           if (!reachedParagraphLimit || isLineSparse) {
             breakPoint = findBestBreakInToken(
@@ -414,9 +417,6 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             );
           }
 
-          // Fallback to "soft" intensity: it allows long-fragment breaks (shortFragment >= 3)
-          // that "normal" and "aggressive" modes skip. For sparse lines this finds better
-          // break positions than aggressive (which requires 1-char fragments).
           if (!breakPoint && isLineSparse) {
             breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
               ...options,
@@ -433,6 +433,10 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             continue;
           }
 
+          if (isLineSparse) {
+            totalUnsolvedSparseLines += 1;
+          }
+
           linePrefix = "";
           continue;
         }
@@ -446,12 +450,7 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
 
         const breakPoint = reachedParagraphLimit
           ? null
-          : findBestBreakInToken(
-              chunk,
-              maxWidth,
-              measureWidth,
-              options
-            );
+          : findBestBreakInToken(chunk, maxWidth, measureWidth, options);
         if (breakPoint) {
           result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
           insertedBreaks += 1;
@@ -470,10 +469,15 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
     }
 
     result += pendingSpaces;
-    return result;
-  });
+    totalBreakCount += insertedBreaks;
+    transformedParagraphs.push(result);
+  }
 
-  return transformedLines.join("\n");
+  return {
+    text: transformedParagraphs.join("\n"),
+    breakCount: totalBreakCount,
+    unsolvedSparseLines: totalUnsolvedSparseLines
+  };
 }
 
 function getNodeLetterSpacing(node) {
@@ -917,6 +921,7 @@ async function processTextNodes(textNodes, mode, settings) {
           let bestText = preparedText;
           let bestSpacing = currentSpacing;
           let bestBreakCount = Number.POSITIVE_INFINITY;
+          let bestSparseCount = Number.POSITIVE_INFINITY;
           let bestDesiredPenalty = Number.POSITIVE_INFINITY;
           let bestCurrentPenalty = Number.POSITIVE_INFINITY;
 
@@ -924,13 +929,14 @@ async function processTextNodes(textNodes, mode, settings) {
           try {
             for (const candidate of candidates) {
               measurer.setLetterSpacing(candidate.letterSpacing);
-              const candidateText = hyphenateRussianTextWithVisibleDash(
+              const hyphenResult = hyphenateRussianTextWithVisibleDash(
                 preparedText,
                 node.width,
                 measurer.measure,
                 settings
               );
-              const breakCount = countInsertedBreaks(candidateText);
+              const breakCount = hyphenResult.breakCount;
+              const sparseCount = hyphenResult.unsolvedSparseLines;
               const desiredPenalty = Math.abs(
                 candidate.percentValue - settings.letterSpacingDesiredPercent
               );
@@ -938,17 +944,21 @@ async function processTextNodes(textNodes, mode, settings) {
                 candidate.percentValue - currentSpacingPercent
               );
 
-              if (
-                breakCount < bestBreakCount ||
-                (breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty) ||
-                (breakCount === bestBreakCount &&
+              const isBetter =
+                sparseCount < bestSparseCount ||
+                (sparseCount === bestSparseCount && breakCount < bestBreakCount) ||
+                (sparseCount === bestSparseCount && breakCount === bestBreakCount &&
+                  desiredPenalty < bestDesiredPenalty) ||
+                (sparseCount === bestSparseCount && breakCount === bestBreakCount &&
                   Math.abs(desiredPenalty - bestDesiredPenalty) < 0.0001 &&
-                  currentPenalty < bestCurrentPenalty)
-              ) {
+                  currentPenalty < bestCurrentPenalty);
+
+              if (isBetter) {
+                bestSparseCount = sparseCount;
                 bestBreakCount = breakCount;
                 bestDesiredPenalty = desiredPenalty;
                 bestCurrentPenalty = currentPenalty;
-                bestText = candidateText;
+                bestText = hyphenResult.text;
                 bestSpacing = candidate.letterSpacing;
               }
             }
@@ -972,7 +982,7 @@ async function processTextNodes(textNodes, mode, settings) {
               node.width,
               measurer.measure,
               settings
-            );
+            ).text;
           } finally {
             measurer.destroy();
           }

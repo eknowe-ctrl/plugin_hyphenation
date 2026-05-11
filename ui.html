@@ -123,12 +123,13 @@
 
     /* ── Settings panel ── */
     .settings-panel {
+      display: none;
       padding: 10px 14px 14px;
       border-top: 1px solid #E2E3E7;
-      display: flex;
       flex-direction: column;
       gap: 13px;
     }
+    .settings-panel.is-open { display: flex; }
 
     /* ── Section label ── */
     .label {
@@ -294,7 +295,7 @@
   </svg>
 </div>
 
-<div class="settings-panel" id="settings-panel" hidden>
+<div class="settings-panel" id="settings-panel">
 
   <div>
     <span class="label">Интенсивность переносов</span>
@@ -410,7 +411,7 @@
 
   settingsToggle.addEventListener('click', function () {
     panelOpen = !panelOpen;
-    settingsPanel.hidden = !panelOpen;
+    settingsPanel.classList.toggle('is-open', panelOpen);
     settingsToggle.classList.toggle('open', panelOpen);
     resize();
   });

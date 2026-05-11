@@ -424,10 +424,6 @@
       console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0447\u0438\u0441\u0442\u0438\u0442\u044C snapshot \u0441\u043B\u043E\u044F", error);
     }
   }
-  function countInsertedBreaks(text) {
-    const matches = text.match(/-\u200B/g);
-    return matches ? matches.length : 0;
-  }
   function fitsWithinWidth(text, maxWidth, measureWidth) {
     return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
   }
@@ -476,12 +472,16 @@
   }
   function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
     const normalized = normalizeTextForRehyphenation(text);
-    const lines = normalized.split("\n");
+    const paragraphs = normalized.split("\n");
     const maxHyphensPerParagraph = options && typeof options.maxHyphensPerParagraph === "number" ? options.maxHyphensPerParagraph : 0;
-    const transformedLines = lines.map((line) => {
+    let totalBreakCount = 0;
+    let totalUnsolvedSparseLines = 0;
+    const transformedParagraphs = [];
+    for (const line of paragraphs) {
       const tokens = line.match(TOKEN_REGEX);
       if (!tokens) {
-        return line;
+        transformedParagraphs.push(line);
+        continue;
       }
       let result = "";
       let currentLine = "";
@@ -529,6 +529,9 @@
               linePrefix = "";
               continue;
             }
+            if (isLineSparse) {
+              totalUnsolvedSparseLines += 1;
+            }
             linePrefix = "";
             continue;
           }
@@ -538,12 +541,7 @@
             chunk = "";
             break;
           }
-          const breakPoint = reachedParagraphLimit ? null : findBestBreakInToken(
-            chunk,
-            maxWidth,
-            measureWidth,
-            options
-          );
+          const breakPoint = reachedParagraphLimit ? null : findBestBreakInToken(chunk, maxWidth, measureWidth, options);
           if (breakPoint) {
             result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
             insertedBreaks += 1;
@@ -559,9 +557,14 @@
         pendingSpaces = "";
       }
       result += pendingSpaces;
-      return result;
-    });
-    return transformedLines.join("\n");
+      totalBreakCount += insertedBreaks;
+      transformedParagraphs.push(result);
+    }
+    return {
+      text: transformedParagraphs.join("\n"),
+      breakCount: totalBreakCount,
+      unsolvedSparseLines: totalUnsolvedSparseLines
+    };
   }
   function getNodeLetterSpacing(node) {
     const spacing = node.letterSpacing;
@@ -939,30 +942,34 @@
               let bestText = preparedText;
               let bestSpacing = currentSpacing;
               let bestBreakCount = Number.POSITIVE_INFINITY;
+              let bestSparseCount = Number.POSITIVE_INFINITY;
               let bestDesiredPenalty = Number.POSITIVE_INFINITY;
               let bestCurrentPenalty = Number.POSITIVE_INFINITY;
               const measurer = createWidthMeasurer(node);
               try {
                 for (const candidate of candidates) {
                   measurer.setLetterSpacing(candidate.letterSpacing);
-                  const candidateText = hyphenateRussianTextWithVisibleDash(
+                  const hyphenResult = hyphenateRussianTextWithVisibleDash(
                     preparedText,
                     node.width,
                     measurer.measure,
                     settings
                   );
-                  const breakCount = countInsertedBreaks(candidateText);
+                  const breakCount = hyphenResult.breakCount;
+                  const sparseCount = hyphenResult.unsolvedSparseLines;
                   const desiredPenalty = Math.abs(
                     candidate.percentValue - settings.letterSpacingDesiredPercent
                   );
                   const currentPenalty = Math.abs(
                     candidate.percentValue - currentSpacingPercent
                   );
-                  if (breakCount < bestBreakCount || breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty) {
+                  const isBetter = sparseCount < bestSparseCount || sparseCount === bestSparseCount && breakCount < bestBreakCount || sparseCount === bestSparseCount && breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || sparseCount === bestSparseCount && breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty;
+                  if (isBetter) {
+                    bestSparseCount = sparseCount;
                     bestBreakCount = breakCount;
                     bestDesiredPenalty = desiredPenalty;
                     bestCurrentPenalty = currentPenalty;
-                    bestText = candidateText;
+                    bestText = hyphenResult.text;
                     bestSpacing = candidate.letterSpacing;
                   }
                 }
@@ -985,7 +992,7 @@
                   node.width,
                   measurer.measure,
                   settings
-                );
+                ).text;
               } finally {
                 measurer.destroy();
               }
