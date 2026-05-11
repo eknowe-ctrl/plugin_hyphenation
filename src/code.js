@@ -17,57 +17,15 @@ const SPARSE_LINE_FILL_THRESHOLD = 0.75;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
 const SELF_CHANGE_SUPPRESS_MS = 600;
-const SETTINGS_STORAGE_KEY = "hyphenationSettingsV4";
+const SETTINGS_STORAGE_KEY = "hyphenationSettingsV5";
 const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
-const CUSTOM_PRESET = "custom";
-const UI_WINDOW_WIDTH = 360;
-const UI_INITIAL_HEIGHT = 760;
-const UI_MIN_HEIGHT = 620;
-const UI_MAX_HEIGHT = 1100;
+const UI_WINDOW_WIDTH = 300;
+const UI_INITIAL_HEIGHT = 220;
+const UI_MIN_HEIGHT = 160;
+const UI_MAX_HEIGHT = 720;
 
-const TYPOGRAPHY_PRESETS = {
-  interface: {
-    autoWatch: true,
-    preventOrphans: true,
-    hangingHyphen: true,
-    optimizeLetterSpacing: true,
-    minWordLengthForHyphenation: 4,
-    hyphenationIntensity: "normal",
-    maxHyphensPerParagraph: 0,
-    letterSpacingMinPercent: -3,
-    letterSpacingDesiredPercent: 0,
-    letterSpacingMaxPercent: 3,
-    letterSpacingStepPercent: 0.5
-  },
-  book: {
-    autoWatch: true,
-    preventOrphans: true,
-    hangingHyphen: false,
-    optimizeLetterSpacing: true,
-    minWordLengthForHyphenation: 5,
-    hyphenationIntensity: "soft",
-    maxHyphensPerParagraph: 2,
-    letterSpacingMinPercent: -1,
-    letterSpacingDesiredPercent: 0,
-    letterSpacingMaxPercent: 1,
-    letterSpacingStepPercent: 0.5
-  },
-  dense: {
-    autoWatch: true,
-    preventOrphans: true,
-    hangingHyphen: true,
-    optimizeLetterSpacing: true,
-    minWordLengthForHyphenation: 4,
-    hyphenationIntensity: "aggressive",
-    maxHyphensPerParagraph: 0,
-    letterSpacingMinPercent: -4,
-    letterSpacingDesiredPercent: -1,
-    letterSpacingMaxPercent: 2,
-    letterSpacingStepPercent: 0.5
-  }
-};
 
 const ORPHAN_WORDS = new Set([
   "в",
@@ -105,8 +63,17 @@ const ORPHAN_WORDS = new Set([
 ]);
 
 const DEFAULT_SETTINGS = {
-  preset: "interface",
-  ...TYPOGRAPHY_PRESETS.interface
+  autoWatch: true,
+  preventOrphans: true,
+  hangingHyphen: true,
+  optimizeLetterSpacing: true,
+  minWordLengthForHyphenation: 5,
+  hyphenationIntensity: "normal",
+  maxHyphensPerParagraph: 0,
+  letterSpacingMinPercent: -3,
+  letterSpacingDesiredPercent: 0,
+  letterSpacingMaxPercent: 2,
+  letterSpacingStepPercent: 0.5
 };
 
 let watchedNodeIds = new Set();
@@ -126,16 +93,6 @@ function clampNumber(value, minValue, maxValue) {
   return Math.max(minValue, Math.min(maxValue, value));
 }
 
-function normalizePresetName(value) {
-  if (typeof value !== "string") {
-    return CUSTOM_PRESET;
-  }
-  if (value in TYPOGRAPHY_PRESETS || value === CUSTOM_PRESET) {
-    return value;
-  }
-  return CUSTOM_PRESET;
-}
-
 function normalizeUiHeight(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -145,78 +102,50 @@ function normalizeUiHeight(value) {
 }
 
 function normalizeSettings(input) {
-  const source = input && typeof input === "object" ? input : {};
-  const preset = normalizePresetName(source.preset || DEFAULT_SETTINGS.preset);
-
-  const fallbackProfile =
-    preset in TYPOGRAPHY_PRESETS
-      ? TYPOGRAPHY_PRESETS[preset]
-      : TYPOGRAPHY_PRESETS[DEFAULT_SETTINGS.preset];
+  const src = input && typeof input === "object" ? input : {};
 
   const autoWatch =
-    typeof source.autoWatch === "boolean"
-      ? source.autoWatch
-      : fallbackProfile.autoWatch;
+    typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
   const preventOrphans =
-    typeof source.preventOrphans === "boolean"
-      ? source.preventOrphans
-      : fallbackProfile.preventOrphans;
+    typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
   const hangingHyphen =
-    typeof source.hangingHyphen === "boolean"
-      ? source.hangingHyphen
-      : fallbackProfile.hangingHyphen;
+    typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
   const optimizeLetterSpacing =
-    typeof source.optimizeLetterSpacing === "boolean"
-      ? source.optimizeLetterSpacing
-      : fallbackProfile.optimizeLetterSpacing;
+    typeof src.optimizeLetterSpacing === "boolean"
+      ? src.optimizeLetterSpacing
+      : DEFAULT_SETTINGS.optimizeLetterSpacing;
+
   const minWordLengthForHyphenation = clampNumber(
-    Number(
-      source.minWordLengthForHyphenation ??
-        fallbackProfile.minWordLengthForHyphenation
-    ),
-    4,
-    12
+    Number(src.minWordLengthForHyphenation ?? DEFAULT_SETTINGS.minWordLengthForHyphenation),
+    4, 12
   );
+
   const hyphenationIntensityRaw = String(
-    source.hyphenationIntensity ?? fallbackProfile.hyphenationIntensity
+    src.hyphenationIntensity ?? DEFAULT_SETTINGS.hyphenationIntensity
   );
   const hyphenationIntensity =
     hyphenationIntensityRaw === "soft" ||
     hyphenationIntensityRaw === "normal" ||
     hyphenationIntensityRaw === "aggressive"
       ? hyphenationIntensityRaw
-      : fallbackProfile.hyphenationIntensity;
+      : DEFAULT_SETTINGS.hyphenationIntensity;
+
   const maxHyphensPerParagraph = clampNumber(
-    Number(
-      source.maxHyphensPerParagraph ?? fallbackProfile.maxHyphensPerParagraph
-    ),
-    0,
-    20
+    Number(src.maxHyphensPerParagraph ?? DEFAULT_SETTINGS.maxHyphensPerParagraph),
+    0, 20
   );
 
   const minPercent = clampNumber(
-    Number(source.letterSpacingMinPercent ?? fallbackProfile.letterSpacingMinPercent),
-    -10,
-    10
+    Number(src.letterSpacingMinPercent ?? DEFAULT_SETTINGS.letterSpacingMinPercent), -10, 10
   );
   const desiredPercent = clampNumber(
-    Number(
-      source.letterSpacingDesiredPercent ??
-        fallbackProfile.letterSpacingDesiredPercent
-    ),
-    -10,
-    10
+    Number(src.letterSpacingDesiredPercent ?? DEFAULT_SETTINGS.letterSpacingDesiredPercent), -10, 10
   );
   const maxPercent = clampNumber(
-    Number(source.letterSpacingMaxPercent ?? fallbackProfile.letterSpacingMaxPercent),
-    -10,
-    10
+    Number(src.letterSpacingMaxPercent ?? DEFAULT_SETTINGS.letterSpacingMaxPercent), -10, 10
   );
-
   const stepPercent = clampNumber(
-    Number(source.letterSpacingStepPercent ?? fallbackProfile.letterSpacingStepPercent),
-    0.1,
-    5
+    Number(src.letterSpacingStepPercent ?? DEFAULT_SETTINGS.letterSpacingStepPercent), 0.1, 5
   );
 
   const sortedMin = Math.min(minPercent, maxPercent);
@@ -224,7 +153,6 @@ function normalizeSettings(input) {
   const sortedDesired = clampNumber(desiredPercent, sortedMin, sortedMax);
 
   return {
-    preset,
     autoWatch,
     preventOrphans,
     hangingHyphen,
@@ -237,17 +165,6 @@ function normalizeSettings(input) {
     letterSpacingMaxPercent: sortedMax,
     letterSpacingStepPercent: stepPercent
   };
-}
-
-function getPresetSettings(presetName) {
-  const name = normalizePresetName(presetName);
-  if (!(name in TYPOGRAPHY_PRESETS)) {
-    return null;
-  }
-  return normalizeSettings({
-    preset: name,
-    ...TYPOGRAPHY_PRESETS[name]
-  });
 }
 
 async function loadRuntimeSettings() {
@@ -1118,8 +1035,7 @@ function postUiStatus(message, kind) {
 function postUiSettings() {
   figma.ui.postMessage({
     type: "settings",
-    settings: runtimeSettings,
-    presets: Object.keys(TYPOGRAPHY_PRESETS)
+    settings: runtimeSettings
   });
 }
 
@@ -1304,24 +1220,10 @@ async function run() {
       return;
     }
 
-    if (message.type === "select-preset") {
-      const preset = getPresetSettings(message.preset);
-      if (!preset) {
-        postUiStatus("Неизвестный пресет типографики.", "error");
-        return;
-      }
-      runtimeSettings = preset;
-      await persistRuntimeSettings();
-      postUiSettings();
-      postUiStatus(`Применён пресет: ${message.preset}.`, "info");
-      return;
-    }
-
     if (message.type === "save-settings") {
       runtimeSettings = normalizeSettings({
         ...runtimeSettings,
-        ...message.settings,
-        preset: CUSTOM_PRESET
+        ...message.settings
       });
       await persistRuntimeSettings();
       postUiSettings();

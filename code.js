@@ -187,56 +187,14 @@
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
   var SELF_CHANGE_SUPPRESS_MS = 600;
-  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV4";
+  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV5";
   var SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
-  var CUSTOM_PRESET = "custom";
-  var UI_WINDOW_WIDTH = 360;
-  var UI_INITIAL_HEIGHT = 760;
-  var UI_MIN_HEIGHT = 620;
-  var UI_MAX_HEIGHT = 1100;
-  var TYPOGRAPHY_PRESETS = {
-    interface: {
-      autoWatch: true,
-      preventOrphans: true,
-      hangingHyphen: true,
-      optimizeLetterSpacing: true,
-      minWordLengthForHyphenation: 4,
-      hyphenationIntensity: "normal",
-      maxHyphensPerParagraph: 0,
-      letterSpacingMinPercent: -3,
-      letterSpacingDesiredPercent: 0,
-      letterSpacingMaxPercent: 3,
-      letterSpacingStepPercent: 0.5
-    },
-    book: {
-      autoWatch: true,
-      preventOrphans: true,
-      hangingHyphen: false,
-      optimizeLetterSpacing: true,
-      minWordLengthForHyphenation: 5,
-      hyphenationIntensity: "soft",
-      maxHyphensPerParagraph: 2,
-      letterSpacingMinPercent: -1,
-      letterSpacingDesiredPercent: 0,
-      letterSpacingMaxPercent: 1,
-      letterSpacingStepPercent: 0.5
-    },
-    dense: {
-      autoWatch: true,
-      preventOrphans: true,
-      hangingHyphen: true,
-      optimizeLetterSpacing: true,
-      minWordLengthForHyphenation: 4,
-      hyphenationIntensity: "aggressive",
-      maxHyphensPerParagraph: 0,
-      letterSpacingMinPercent: -4,
-      letterSpacingDesiredPercent: -1,
-      letterSpacingMaxPercent: 2,
-      letterSpacingStepPercent: 0.5
-    }
-  };
+  var UI_WINDOW_WIDTH = 300;
+  var UI_INITIAL_HEIGHT = 220;
+  var UI_MIN_HEIGHT = 160;
+  var UI_MAX_HEIGHT = 720;
   var ORPHAN_WORDS = /* @__PURE__ */ new Set([
     "\u0432",
     "\u0441",
@@ -271,9 +229,19 @@
     "\u0431\u0435\u0437",
     "\u0438\u043B\u0438"
   ]);
-  var DEFAULT_SETTINGS = __spreadValues({
-    preset: "interface"
-  }, TYPOGRAPHY_PRESETS.interface);
+  var DEFAULT_SETTINGS = {
+    autoWatch: true,
+    preventOrphans: true,
+    hangingHyphen: true,
+    optimizeLetterSpacing: true,
+    minWordLengthForHyphenation: 5,
+    hyphenationIntensity: "normal",
+    maxHyphensPerParagraph: 0,
+    letterSpacingMinPercent: -3,
+    letterSpacingDesiredPercent: 0,
+    letterSpacingMaxPercent: 2,
+    letterSpacingStepPercent: 0.5
+  };
   var watchedNodeIds = /* @__PURE__ */ new Set();
   var watchedNodeWidths = /* @__PURE__ */ new Map();
   var autoRecalcTimer = null;
@@ -288,15 +256,6 @@
     }
     return Math.max(minValue, Math.min(maxValue, value));
   }
-  function normalizePresetName(value) {
-    if (typeof value !== "string") {
-      return CUSTOM_PRESET;
-    }
-    if (value in TYPOGRAPHY_PRESETS || value === CUSTOM_PRESET) {
-      return value;
-    }
-    return CUSTOM_PRESET;
-  }
   function normalizeUiHeight(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
@@ -306,50 +265,42 @@
   }
   function normalizeSettings(input) {
     var _a, _b, _c, _d, _e, _f, _g;
-    const source = input && typeof input === "object" ? input : {};
-    const preset = normalizePresetName(source.preset || DEFAULT_SETTINGS.preset);
-    const fallbackProfile = preset in TYPOGRAPHY_PRESETS ? TYPOGRAPHY_PRESETS[preset] : TYPOGRAPHY_PRESETS[DEFAULT_SETTINGS.preset];
-    const autoWatch = typeof source.autoWatch === "boolean" ? source.autoWatch : fallbackProfile.autoWatch;
-    const preventOrphans = typeof source.preventOrphans === "boolean" ? source.preventOrphans : fallbackProfile.preventOrphans;
-    const hangingHyphen = typeof source.hangingHyphen === "boolean" ? source.hangingHyphen : fallbackProfile.hangingHyphen;
-    const optimizeLetterSpacing = typeof source.optimizeLetterSpacing === "boolean" ? source.optimizeLetterSpacing : fallbackProfile.optimizeLetterSpacing;
+    const src = input && typeof input === "object" ? input : {};
+    const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
+    const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
+    const hangingHyphen = typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
+    const optimizeLetterSpacing = typeof src.optimizeLetterSpacing === "boolean" ? src.optimizeLetterSpacing : DEFAULT_SETTINGS.optimizeLetterSpacing;
     const minWordLengthForHyphenation = clampNumber(
-      Number(
-        (_a = source.minWordLengthForHyphenation) != null ? _a : fallbackProfile.minWordLengthForHyphenation
-      ),
+      Number((_a = src.minWordLengthForHyphenation) != null ? _a : DEFAULT_SETTINGS.minWordLengthForHyphenation),
       4,
       12
     );
     const hyphenationIntensityRaw = String(
-      (_b = source.hyphenationIntensity) != null ? _b : fallbackProfile.hyphenationIntensity
+      (_b = src.hyphenationIntensity) != null ? _b : DEFAULT_SETTINGS.hyphenationIntensity
     );
-    const hyphenationIntensity = hyphenationIntensityRaw === "soft" || hyphenationIntensityRaw === "normal" || hyphenationIntensityRaw === "aggressive" ? hyphenationIntensityRaw : fallbackProfile.hyphenationIntensity;
+    const hyphenationIntensity = hyphenationIntensityRaw === "soft" || hyphenationIntensityRaw === "normal" || hyphenationIntensityRaw === "aggressive" ? hyphenationIntensityRaw : DEFAULT_SETTINGS.hyphenationIntensity;
     const maxHyphensPerParagraph = clampNumber(
-      Number(
-        (_c = source.maxHyphensPerParagraph) != null ? _c : fallbackProfile.maxHyphensPerParagraph
-      ),
+      Number((_c = src.maxHyphensPerParagraph) != null ? _c : DEFAULT_SETTINGS.maxHyphensPerParagraph),
       0,
       20
     );
     const minPercent = clampNumber(
-      Number((_d = source.letterSpacingMinPercent) != null ? _d : fallbackProfile.letterSpacingMinPercent),
+      Number((_d = src.letterSpacingMinPercent) != null ? _d : DEFAULT_SETTINGS.letterSpacingMinPercent),
       -10,
       10
     );
     const desiredPercent = clampNumber(
-      Number(
-        (_e = source.letterSpacingDesiredPercent) != null ? _e : fallbackProfile.letterSpacingDesiredPercent
-      ),
+      Number((_e = src.letterSpacingDesiredPercent) != null ? _e : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
       -10,
       10
     );
     const maxPercent = clampNumber(
-      Number((_f = source.letterSpacingMaxPercent) != null ? _f : fallbackProfile.letterSpacingMaxPercent),
+      Number((_f = src.letterSpacingMaxPercent) != null ? _f : DEFAULT_SETTINGS.letterSpacingMaxPercent),
       -10,
       10
     );
     const stepPercent = clampNumber(
-      Number((_g = source.letterSpacingStepPercent) != null ? _g : fallbackProfile.letterSpacingStepPercent),
+      Number((_g = src.letterSpacingStepPercent) != null ? _g : DEFAULT_SETTINGS.letterSpacingStepPercent),
       0.1,
       5
     );
@@ -357,7 +308,6 @@
     const sortedMax = Math.max(minPercent, maxPercent);
     const sortedDesired = clampNumber(desiredPercent, sortedMin, sortedMax);
     return {
-      preset,
       autoWatch,
       preventOrphans,
       hangingHyphen,
@@ -370,15 +320,6 @@
       letterSpacingMaxPercent: sortedMax,
       letterSpacingStepPercent: stepPercent
     };
-  }
-  function getPresetSettings(presetName) {
-    const name = normalizePresetName(presetName);
-    if (!(name in TYPOGRAPHY_PRESETS)) {
-      return null;
-    }
-    return normalizeSettings(__spreadValues({
-      preset: name
-    }, TYPOGRAPHY_PRESETS[name]));
   }
   function loadRuntimeSettings() {
     return __async(this, null, function* () {
@@ -1099,8 +1040,7 @@
   function postUiSettings() {
     figma.ui.postMessage({
       type: "settings",
-      settings: runtimeSettings,
-      presets: Object.keys(TYPOGRAPHY_PRESETS)
+      settings: runtimeSettings
     });
   }
   function postUiDebug(debug) {
@@ -1265,22 +1205,8 @@
           postUiSettings();
           return;
         }
-        if (message.type === "select-preset") {
-          const preset = getPresetSettings(message.preset);
-          if (!preset) {
-            postUiStatus("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0438.", "error");
-            return;
-          }
-          runtimeSettings = preset;
-          yield persistRuntimeSettings();
-          postUiSettings();
-          postUiStatus(`\u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D \u043F\u0440\u0435\u0441\u0435\u0442: ${message.preset}.`, "info");
-          return;
-        }
         if (message.type === "save-settings") {
-          runtimeSettings = normalizeSettings(__spreadProps(__spreadValues(__spreadValues({}, runtimeSettings), message.settings), {
-            preset: CUSTOM_PRESET
-          }));
+          runtimeSettings = normalizeSettings(__spreadValues(__spreadValues({}, runtimeSettings), message.settings));
           yield persistRuntimeSettings();
           postUiSettings();
           return;
