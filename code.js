@@ -187,9 +187,9 @@
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
   var UI_WINDOW_WIDTH = 300;
-  var UI_INITIAL_HEIGHT = 220;
-  var UI_MIN_HEIGHT = 160;
-  var UI_MAX_HEIGHT = 720;
+  var UI_INITIAL_HEIGHT = 700;
+  var UI_MIN_HEIGHT = 300;
+  var UI_MAX_HEIGHT = 900;
   var ORPHAN_WORDS = /* @__PURE__ */ new Set([
     "\u0432",
     "\u0441",

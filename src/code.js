@@ -17,9 +17,9 @@ const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
 const UI_WINDOW_WIDTH = 300;
-const UI_INITIAL_HEIGHT = 220;
-const UI_MIN_HEIGHT = 160;
-const UI_MAX_HEIGHT = 720;
+const UI_INITIAL_HEIGHT = 700;
+const UI_MIN_HEIGHT = 300;
+const UI_MAX_HEIGHT = 900;
 
 
 const ORPHAN_WORDS = new Set([

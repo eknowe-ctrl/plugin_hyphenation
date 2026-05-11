@@ -2,404 +2,331 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Русские переносы</title>
+  <title>Russian Hyphenation</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
       width: 100%;
-      margin: 0;
-      font-family: Inter, system-ui, -apple-system, sans-serif;
+      background: #1C2E27;
+      color: #fff;
+      font-family: Inter, -apple-system, system-ui, sans-serif;
       font-size: 12px;
-      line-height: 1;
-      color: #141416;
-      background: #fff;
+      line-height: 1.4;
       -webkit-font-smoothing: antialiased;
     }
 
     /* ── Header ── */
     .header {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 13px 14px 11px;
-      border-bottom: 1px solid #E2E3E7;
-    }
-    .logo {
-      width: 22px;
-      height: 22px;
-      border-radius: 5px;
-      background: #141416;
-      color: #fff;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
+      padding: 18px 14px 14px;
     }
     .header h1 {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: -0.1px;
-      margin: 0;
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 0.9;
+      letter-spacing: -0.5px;
+      text-transform: uppercase;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .header p {
+      font-size: 11px;
+      color: #6B9080;
+      font-weight: 400;
     }
 
-    /* ── Main ── */
-    .main {
-      padding: 12px 14px 10px;
+    /* ── Content ── */
+    .content {
+      padding: 0 10px;
       display: flex;
       flex-direction: column;
-      gap: 7px;
+      gap: 8px;
     }
 
-    /* ── Buttons ── */
-    .btn-primary {
-      width: 100%;
-      height: 34px;
-      background: #141416;
+    /* ── Card ── */
+    .card {
+      background: #243C33;
+      border-radius: 12px;
+      padding: 13px 13px 15px;
+    }
+    .card-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
       color: #fff;
+      margin-bottom: 11px;
+    }
+
+    /* ── 3-column grid ── */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    .field-col {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .col-label {
+      font-size: 10px;
+      color: #6B9080;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .field-col input[type="number"] {
+      width: 100%;
+      height: 38px;
+      background: #1C2E27;
       border: none;
       border-radius: 8px;
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: -0.1px;
-      cursor: pointer;
-      transition: background 0.12s;
-    }
-    .btn-primary:hover:not(:disabled) { background: #2c2c30; }
-    .btn-primary:disabled { opacity: 0.35; cursor: default; }
-
-    .btn-ghost {
-      width: 100%;
-      height: 30px;
-      background: transparent;
-      border: 1px solid #E2E3E7;
-      border-radius: 7px;
-      font-size: 11px;
-      color: #7B7C8D;
-      cursor: pointer;
-      transition: border-color 0.12s, color 0.12s;
-    }
-    .btn-ghost:hover:not(:disabled) { border-color: #141416; color: #141416; }
-    .btn-ghost:disabled { opacity: 0.35; cursor: default; }
-
-    /* ── Status ── */
-    .status {
-      font-size: 11px;
-      line-height: 1.45;
-      color: #7B7C8D;
-      min-height: 16px;
-      padding: 1px 0;
-    }
-    .status.success { color: #0A8754; }
-    .status.error   { color: #CF2D2D; }
-
-    /* ── Settings toggle ── */
-    .settings-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 9px 14px;
-      border-top: 1px solid #E2E3E7;
-      cursor: pointer;
-      user-select: none;
-    }
-    .settings-toggle span {
-      font-size: 11px;
-      font-weight: 500;
-      color: #7B7C8D;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .settings-toggle:hover span,
-    .settings-toggle:hover .chevron { color: #141416; }
-    .chevron {
-      color: #7B7C8D;
-      transition: transform 0.2s ease;
-    }
-    .settings-toggle.open .chevron { transform: rotate(180deg); }
-
-    /* ── Settings panel ── */
-    .settings-panel {
-      display: none;
-      padding: 10px 14px 14px;
-      border-top: 1px solid #E2E3E7;
-      flex-direction: column;
-      gap: 13px;
-    }
-    .settings-panel.is-open { display: flex; }
-
-    /* ── Section label ── */
-    .label {
-      display: block;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: #7B7C8D;
-      margin-bottom: 7px;
-    }
-
-    /* ── Segmented control ── */
-    .segmented {
-      display: flex;
-      background: #F7F7F8;
-      border-radius: 7px;
-      padding: 2px;
-      gap: 1px;
-    }
-    .segmented input[type="radio"] { display: none; }
-    .segmented label {
-      flex: 1;
+      color: #fff;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
       text-align: center;
-      padding: 5px 2px;
-      border-radius: 5px;
-      font-size: 11px;
-      color: #7B7C8D;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
+      outline: none;
+      -moz-appearance: textfield;
+      appearance: textfield;
     }
-    .segmented input:checked + label {
-      background: #fff;
-      color: #141416;
-      font-weight: 500;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06);
+    .field-col input[type="number"]::-webkit-inner-spin-button,
+    .field-col input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .field-col input[type="number"]:focus {
+      box-shadow: 0 0 0 1.5px #F5651A;
     }
 
-    /* ── Toggle switches ── */
-    .toggle-group { display: flex; flex-direction: column; }
+    /* ── Toggle list ── */
+    .toggle-list {
+      display: flex;
+      flex-direction: column;
+    }
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 0;
-      border-bottom: 1px solid #F3F3F5;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      gap: 8px;
     }
     .toggle-row:last-child { border-bottom: none; }
-    .toggle-row .label-text { font-size: 12px; }
+    .row-label {
+      font-size: 12px;
+      color: #fff;
+      flex: 1;
+    }
 
+    /* ── Switch ── */
     .switch {
       position: relative;
-      display: inline-block;
-      width: 30px;
-      height: 17px;
+      width: 38px;
+      height: 22px;
       flex-shrink: 0;
     }
     .switch input { display: none; }
     .switch .track {
       position: absolute;
-      cursor: pointer;
       inset: 0;
-      background: #D1D1D6;
-      border-radius: 8.5px;
+      background: #2D4840;
+      border-radius: 11px;
+      cursor: pointer;
       transition: background 0.2s;
     }
     .switch .track::after {
       content: '';
       position: absolute;
-      width: 13px;
-      height: 13px;
-      left: 2px;
-      top: 2px;
-      background: #fff;
+      width: 16px;
+      height: 16px;
+      top: 3px;
+      left: 3px;
+      background: #4E7060;
       border-radius: 50%;
-      transition: transform 0.2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      transition: transform 0.2s, background 0.2s;
     }
-    .switch input:checked + .track { background: #141416; }
-    .switch input:checked + .track::after { transform: translateX(13px); }
+    .switch input:checked + .track { background: #F5651A; }
+    .switch input:checked + .track::after {
+      background: #fff;
+      transform: translateX(16px);
+    }
 
-    /* ── Letter spacing ── */
-    .ls-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
-    }
-    .ls-field { display: flex; flex-direction: column; gap: 4px; }
-    .ls-field .sub-label {
-      font-size: 10px;
-      color: #7B7C8D;
+    /* ── Inline number (min word length) ── */
+    .inline-num {
+      width: 56px;
+      height: 32px;
+      background: #1C2E27;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
       text-align: center;
-    }
-    .ls-field input {
-      width: 100%;
-      height: 28px;
-      background: #F7F7F8;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      font-size: 12px;
-      text-align: center;
-      color: #141416;
       outline: none;
-      transition: border-color 0.15s, background 0.15s;
+      flex-shrink: 0;
+      -moz-appearance: textfield;
+      appearance: textfield;
     }
-    .ls-field input:focus { border-color: #141416; background: #fff; }
+    .inline-num::-webkit-inner-spin-button,
+    .inline-num::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .inline-num:focus { box-shadow: 0 0 0 1.5px #F5651A; }
 
-    /* ── Numeric field rows ── */
-    .field-row {
+    /* ── Actions ── */
+    .actions {
+      padding: 12px 10px 0;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      flex-direction: column;
+      gap: 2px;
     }
-    .field-row .label-text { font-size: 12px; }
-    .field-row input[type="number"] {
-      width: 68px;
-      height: 28px;
-      background: #F7F7F8;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      font-size: 12px;
-      text-align: right;
-      padding: 0 8px;
-      color: #141416;
-      outline: none;
-      transition: border-color 0.15s, background 0.15s;
+    .btn-apply {
+      width: 100%;
+      height: 46px;
+      background: #F5651A;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.1px;
+      cursor: pointer;
+      transition: background 0.15s;
     }
-    .field-row input:focus { border-color: #141416; background: #fff; }
+    .btn-apply:hover:not(:disabled) { background: #E05A14; }
+    .btn-apply:active:not(:disabled) { background: #CC5010; }
+    .btn-apply:disabled { opacity: 0.4; cursor: default; }
 
-    /* ── Divider ── */
-    .divider { border: none; border-top: 1px solid #E2E3E7; margin: 0; }
+    .btn-reset {
+      width: 100%;
+      height: 38px;
+      background: transparent;
+      border: none;
+      color: #6B9080;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .btn-reset:hover:not(:disabled) { color: #fff; }
+    .btn-reset:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Status ── */
+    .status {
+      min-height: 16px;
+      padding: 4px 0 6px;
+      font-size: 11px;
+      color: #6B9080;
+      text-align: center;
+      line-height: 1.45;
+    }
+    .status.success { color: #4BB87A; }
+    .status.error   { color: #F5651A; }
 
     /* ── Footer ── */
     .footer {
-      padding: 8px 14px 10px;
-      border-top: 1px solid #E2E3E7;
+      padding: 6px 14px 14px;
       font-size: 10px;
-      color: #C0C0CC;
+      color: #3D6050;
       text-align: center;
     }
   </style>
 </head>
 <body>
 
-<header class="header">
-  <div class="logo">Аа</div>
-  <h1>Русские переносы</h1>
-</header>
-
-<div class="main">
-  <button class="btn-primary" id="apply-btn">Применить переносы</button>
-  <button class="btn-ghost" id="reset-btn">Сбросить переносы</button>
-  <div class="status" id="status" aria-live="polite">Выделите текст и нажмите Применить</div>
+<div class="header">
+  <h1>Russian<br>Hyphenation</h1>
+  <p>Настройте переносы в русском тексте</p>
 </div>
 
-<div class="settings-toggle" id="settings-toggle">
-  <span>Настройки</span>
-  <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"
-       stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="6 9 12 15 18 9"/>
-  </svg>
-</div>
+<div class="content">
 
-<div class="settings-panel" id="settings-panel">
-
-  <div>
-    <span class="label">Переносы</span>
-    <div class="ls-row">
-      <div class="ls-field">
-        <span class="sub-label">После первой</span>
+  <div class="card">
+    <span class="card-label">Переносы</span>
+    <div class="grid-3">
+      <div class="field-col">
+        <span class="col-label">После первой</span>
         <input type="number" id="minBefore" min="1" max="5" step="1" />
       </div>
-      <div class="ls-field">
-        <span class="sub-label">До последней</span>
+      <div class="field-col">
+        <span class="col-label">До последней</span>
         <input type="number" id="minAfter" min="1" max="5" step="1" />
       </div>
-      <div class="ls-field">
-        <span class="sub-label">Подряд макс.</span>
+      <div class="field-col">
+        <span class="col-label">Подряд макс.</span>
         <input type="number" id="maxConsec" min="0" max="5" step="1" />
       </div>
     </div>
   </div>
 
-  <hr class="divider" />
-
-  <div class="toggle-group">
-    <div class="toggle-row">
-      <span class="label-text">Автопересчёт по ширине</span>
-      <label class="switch">
-        <input type="checkbox" id="autoWatch" />
-        <span class="track"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <span class="label-text">Анти-висячие предлоги</span>
-      <label class="switch">
-        <input type="checkbox" id="preventOrphans" />
-        <span class="track"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <span class="label-text">Авто неразрывные пробелы</span>
-      <label class="switch">
-        <input type="checkbox" id="autoNbsp" />
-        <span class="track"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <span class="label-text">Висячий дефис</span>
-      <label class="switch">
-        <input type="checkbox" id="hangingHyphen" />
-        <span class="track"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <span class="label-text">Оптимизировать трекинг</span>
-      <label class="switch">
-        <input type="checkbox" id="optimizeLetterSpacing" />
-        <span class="track"></span>
-      </label>
-    </div>
-  </div>
-
-  <hr class="divider" />
-
-  <div>
-    <span class="label">Трекинг (% от кегля)</span>
-    <div class="ls-row">
-      <div class="ls-field">
-        <span class="sub-label">Мин.</span>
+  <div class="card">
+    <span class="card-label">Трекинг (% от кегля)</span>
+    <div class="grid-3">
+      <div class="field-col">
+        <span class="col-label">Минимально</span>
         <input type="number" id="lsMin" step="0.5" />
       </div>
-      <div class="ls-field">
-        <span class="sub-label">Цель</span>
+      <div class="field-col">
+        <span class="col-label">Цель</span>
         <input type="number" id="lsDesired" step="0.5" />
       </div>
-      <div class="ls-field">
-        <span class="sub-label">Макс.</span>
+      <div class="field-col">
+        <span class="col-label">Максимально</span>
         <input type="number" id="lsMax" step="0.5" />
       </div>
     </div>
   </div>
 
-  <hr class="divider" />
-
-  <div class="field-row">
-    <span class="label-text">Мин. длина слова</span>
-    <input type="number" id="minWordLen" min="4" max="12" step="1" />
+  <div class="card">
+    <span class="card-label">Параметры</span>
+    <div class="toggle-list">
+      <div class="toggle-row">
+        <span class="row-label">Автопересчёт по ширине</span>
+        <label class="switch"><input type="checkbox" id="autoWatch" /><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="row-label">Анти-висячие предлоги</span>
+        <label class="switch"><input type="checkbox" id="preventOrphans" /><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="row-label">Неразрывные пробелы</span>
+        <label class="switch"><input type="checkbox" id="autoNbsp" /><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="row-label">Висячий дефис</span>
+        <label class="switch"><input type="checkbox" id="hangingHyphen" /><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="row-label">Оптимизировать трекинг</span>
+        <label class="switch"><input type="checkbox" id="optimizeLetterSpacing" /><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="row-label">Минимальная длина слова</span>
+        <input type="number" class="inline-num" id="minWordLen" min="4" max="12" step="1" />
+      </div>
+    </div>
   </div>
 
 </div>
 
-<footer class="footer">by Eugeny Leshchenko</footer>
+<div class="actions">
+  <button class="btn-apply" id="apply-btn">Применить переносы</button>
+  <button class="btn-reset" id="reset-btn">Сбросить переносы</button>
+  <div class="status" id="status" aria-live="polite">Выделите текст и выберите действие.</div>
+</div>
+
+<div class="footer">by Eugeny Leshchenko</div>
 
 <script>
-  var applyBtn        = document.getElementById('apply-btn');
-  var resetBtn        = document.getElementById('reset-btn');
-  var statusEl        = document.getElementById('status');
-  var settingsToggle  = document.getElementById('settings-toggle');
-  var settingsPanel   = document.getElementById('settings-panel');
+  var applyBtn = document.getElementById('apply-btn');
+  var resetBtn = document.getElementById('reset-btn');
+  var statusEl = document.getElementById('status');
 
-  var MIN_H = 160;
-  var MAX_H = 720;
-  var panelOpen = false;
+  var MIN_H = 300;
+  var MAX_H = 900;
 
   function send(type, extra) {
-    var msg = Object.assign({ type: type }, extra || {});
-    parent.postMessage({ pluginMessage: msg }, '*');
+    parent.postMessage({ pluginMessage: Object.assign({ type: type }, extra || {}) }, '*');
   }
 
   function resize() {
@@ -417,13 +344,6 @@
     applyBtn.disabled = on;
     resetBtn.disabled = on;
   }
-
-  settingsToggle.addEventListener('click', function () {
-    panelOpen = !panelOpen;
-    settingsPanel.classList.toggle('is-open', panelOpen);
-    settingsToggle.classList.toggle('open', panelOpen);
-    resize();
-  });
 
   var toggleFields = {
     autoWatch:             document.getElementById('autoWatch'),
@@ -444,7 +364,7 @@
 
   function renderSettings(s) {
     if (!s) return;
-    Object.keys(toggleFields).forEach(function (k) {
+    Object.keys(toggleFields).forEach(function(k) {
       toggleFields[k].checked = !!s[k];
     });
     var nf = numFields;
@@ -475,16 +395,16 @@
     };
   }
 
-  applyBtn.addEventListener('click', function () { send('apply'); });
-  resetBtn.addEventListener('click', function () { send('reset'); });
+  applyBtn.addEventListener('click', function() { send('apply'); });
+  resetBtn.addEventListener('click', function() { send('reset'); });
 
-  Object.values(toggleFields).concat(Object.values(numFields)).forEach(function (el) {
-    el.addEventListener('change', function () {
+  Object.values(toggleFields).concat(Object.values(numFields)).forEach(function(el) {
+    el.addEventListener('change', function() {
       send('save-settings', { settings: collectSettings() });
     });
   });
 
-  window.onmessage = function (ev) {
+  window.onmessage = function(ev) {
     var msg = ev.data && ev.data.pluginMessage;
     if (!msg) return;
     if (msg.type === 'loading')  setLoading(!!msg.isLoading);
