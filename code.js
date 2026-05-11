@@ -177,17 +177,12 @@
   var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
   var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
-  var HYPHENATION_INTENSITY_ORDER = {
-    soft: 0,
-    normal: 1,
-    aggressive: 2
-  };
   var WIDTH_EPSILON = 0.01;
   var SPARSE_LINE_FILL_THRESHOLD = 0.75;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
   var SELF_CHANGE_SUPPRESS_MS = 600;
-  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV5";
+  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV6";
   var SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
@@ -235,8 +230,9 @@
     hangingHyphen: true,
     optimizeLetterSpacing: true,
     minWordLengthForHyphenation: 5,
-    hyphenationIntensity: "normal",
-    maxHyphensPerParagraph: 0,
+    minLettersBeforeHyphen: 2,
+    minLettersAfterHyphen: 3,
+    maxConsecutiveHyphens: 2,
     letterSpacingMinPercent: -3,
     letterSpacingDesiredPercent: 0,
     letterSpacingMaxPercent: 2,
@@ -264,7 +260,7 @@
     return Math.round(clampNumber(parsed, UI_MIN_HEIGHT, UI_MAX_HEIGHT));
   }
   function normalizeSettings(input) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const src = input && typeof input === "object" ? input : {};
     const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
     const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
@@ -275,32 +271,38 @@
       4,
       12
     );
-    const hyphenationIntensityRaw = String(
-      (_b = src.hyphenationIntensity) != null ? _b : DEFAULT_SETTINGS.hyphenationIntensity
+    const minLettersBeforeHyphen = clampNumber(
+      Number((_b = src.minLettersBeforeHyphen) != null ? _b : DEFAULT_SETTINGS.minLettersBeforeHyphen),
+      1,
+      5
     );
-    const hyphenationIntensity = hyphenationIntensityRaw === "soft" || hyphenationIntensityRaw === "normal" || hyphenationIntensityRaw === "aggressive" ? hyphenationIntensityRaw : DEFAULT_SETTINGS.hyphenationIntensity;
-    const maxHyphensPerParagraph = clampNumber(
-      Number((_c = src.maxHyphensPerParagraph) != null ? _c : DEFAULT_SETTINGS.maxHyphensPerParagraph),
+    const minLettersAfterHyphen = clampNumber(
+      Number((_c = src.minLettersAfterHyphen) != null ? _c : DEFAULT_SETTINGS.minLettersAfterHyphen),
+      1,
+      5
+    );
+    const maxConsecutiveHyphens = clampNumber(
+      Number((_d = src.maxConsecutiveHyphens) != null ? _d : DEFAULT_SETTINGS.maxConsecutiveHyphens),
       0,
-      20
+      5
     );
     const minPercent = clampNumber(
-      Number((_d = src.letterSpacingMinPercent) != null ? _d : DEFAULT_SETTINGS.letterSpacingMinPercent),
+      Number((_e = src.letterSpacingMinPercent) != null ? _e : DEFAULT_SETTINGS.letterSpacingMinPercent),
       -10,
       10
     );
     const desiredPercent = clampNumber(
-      Number((_e = src.letterSpacingDesiredPercent) != null ? _e : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
+      Number((_f = src.letterSpacingDesiredPercent) != null ? _f : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
       -10,
       10
     );
     const maxPercent = clampNumber(
-      Number((_f = src.letterSpacingMaxPercent) != null ? _f : DEFAULT_SETTINGS.letterSpacingMaxPercent),
+      Number((_g = src.letterSpacingMaxPercent) != null ? _g : DEFAULT_SETTINGS.letterSpacingMaxPercent),
       -10,
       10
     );
     const stepPercent = clampNumber(
-      Number((_g = src.letterSpacingStepPercent) != null ? _g : DEFAULT_SETTINGS.letterSpacingStepPercent),
+      Number((_h = src.letterSpacingStepPercent) != null ? _h : DEFAULT_SETTINGS.letterSpacingStepPercent),
       0.1,
       5
     );
@@ -313,8 +315,9 @@
       hangingHyphen,
       optimizeLetterSpacing,
       minWordLengthForHyphenation,
-      hyphenationIntensity,
-      maxHyphensPerParagraph,
+      minLettersBeforeHyphen,
+      minLettersAfterHyphen,
+      maxConsecutiveHyphens,
       letterSpacingMinPercent: sortedMin,
       letterSpacingDesiredPercent: sortedDesired,
       letterSpacingMaxPercent: sortedMax,
@@ -430,8 +433,8 @@
   function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
     const useHangingHyphen = Boolean(options && options.hangingHyphen);
     const minWordLength = options && typeof options.minWordLengthForHyphenation === "number" ? options.minWordLengthForHyphenation : 4;
-    const intensity = options && typeof options.hyphenationIntensity === "string" ? options.hyphenationIntensity : "normal";
-    const minIntensityRank = intensity in HYPHENATION_INTENSITY_ORDER ? HYPHENATION_INTENSITY_ORDER[intensity] : HYPHENATION_INTENSITY_ORDER.normal;
+    const minBefore = options && typeof options.minLettersBeforeHyphen === "number" ? options.minLettersBeforeHyphen : 2;
+    const minAfter = options && typeof options.minLettersAfterHyphen === "number" ? options.minLettersAfterHyphen : 3;
     const match = token.match(RUSSIAN_TOKEN_REGEX);
     if (!match) {
       return null;
@@ -449,9 +452,7 @@
     for (let i = parts.length - 1; i >= 1; i -= 1) {
       const leftCore = parts.slice(0, i).join("");
       const rightCore = parts.slice(i).join("");
-      const shortFragment = Math.min(leftCore.length, rightCore.length);
-      const fragmentIntensityRank = shortFragment >= 3 ? HYPHENATION_INTENSITY_ORDER.soft : shortFragment === 2 ? HYPHENATION_INTENSITY_ORDER.normal : HYPHENATION_INTENSITY_ORDER.aggressive;
-      if (fragmentIntensityRank < minIntensityRank) {
+      if (leftCore.length < minBefore || rightCore.length < minAfter) {
         continue;
       }
       const leftWithDash = `${leading}${leftCore}-`;
@@ -474,6 +475,7 @@
     const normalized = normalizeTextForRehyphenation(text);
     const paragraphs = normalized.split("\n");
     const maxHyphensPerParagraph = options && typeof options.maxHyphensPerParagraph === "number" ? options.maxHyphensPerParagraph : 0;
+    const maxConsecutiveHyphens = options && typeof options.maxConsecutiveHyphens === "number" ? options.maxConsecutiveHyphens : 0;
     let totalBreakCount = 0;
     let totalUnsolvedSparseLines = 0;
     const transformedParagraphs = [];
@@ -487,6 +489,7 @@
       let currentLine = "";
       let pendingSpaces = "";
       let insertedBreaks = 0;
+      let consecutiveHyphenLines = 0;
       for (const token of tokens) {
         if (SPACE_TOKEN_REGEX.test(token)) {
           pendingSpaces += token;
@@ -503,27 +506,26 @@
             break;
           }
           const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
+          const reachedConsecutiveLimit = maxConsecutiveHyphens > 0 && consecutiveHyphenLines >= maxConsecutiveHyphens;
           const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
           if (linePrefix.length > 0) {
             const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
             const isLineSparse = lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+            const canBreak = (!reachedParagraphLimit || isLineSparse) && !reachedConsecutiveLimit;
             let breakPoint2 = null;
-            if (!reachedParagraphLimit || isLineSparse) {
-              breakPoint2 = findBestBreakInToken(
-                chunk,
-                remainingWidth,
-                measureWidth,
-                options
-              );
+            if (canBreak) {
+              breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
             }
-            if (!breakPoint2 && isLineSparse) {
+            if (!breakPoint2 && isLineSparse && !reachedConsecutiveLimit) {
               breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, __spreadProps(__spreadValues({}, options), {
-                hyphenationIntensity: "soft"
+                minLettersBeforeHyphen: 1,
+                minLettersAfterHyphen: 1
               }));
             }
             if (breakPoint2) {
               result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
               insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
               chunk = breakPoint2.right;
               currentLine = "";
               linePrefix = "";
@@ -532,6 +534,7 @@
             if (isLineSparse) {
               totalUnsolvedSparseLines += 1;
             }
+            consecutiveHyphenLines = 0;
             linePrefix = "";
             continue;
           }
@@ -541,15 +544,18 @@
             chunk = "";
             break;
           }
-          const breakPoint = reachedParagraphLimit ? null : findBestBreakInToken(chunk, maxWidth, measureWidth, options);
+          const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
+          const breakPoint = canBreakLong ? findBestBreakInToken(chunk, maxWidth, measureWidth, options) : null;
           if (breakPoint) {
             result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
             insertedBreaks += 1;
+            consecutiveHyphenLines += 1;
             chunk = breakPoint.right;
             currentLine = "";
             linePrefix = "";
             continue;
           }
+          consecutiveHyphenLines = 0;
           result += chunk;
           currentLine = chunk;
           chunk = "";

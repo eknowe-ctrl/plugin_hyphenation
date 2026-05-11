@@ -7,17 +7,12 @@ const hypher = new Hypher(russianPatterns);
 const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
-const HYPHENATION_INTENSITY_ORDER = {
-  soft: 0,
-  normal: 1,
-  aggressive: 2
-};
 const WIDTH_EPSILON = 0.01;
 const SPARSE_LINE_FILL_THRESHOLD = 0.75;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
 const SELF_CHANGE_SUPPRESS_MS = 600;
-const SETTINGS_STORAGE_KEY = "hyphenationSettingsV5";
+const SETTINGS_STORAGE_KEY = "hyphenationSettingsV6";
 const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
@@ -68,8 +63,9 @@ const DEFAULT_SETTINGS = {
   hangingHyphen: true,
   optimizeLetterSpacing: true,
   minWordLengthForHyphenation: 5,
-  hyphenationIntensity: "normal",
-  maxHyphensPerParagraph: 0,
+  minLettersBeforeHyphen: 2,
+  minLettersAfterHyphen: 3,
+  maxConsecutiveHyphens: 2,
   letterSpacingMinPercent: -3,
   letterSpacingDesiredPercent: 0,
   letterSpacingMaxPercent: 2,
@@ -120,19 +116,19 @@ function normalizeSettings(input) {
     4, 12
   );
 
-  const hyphenationIntensityRaw = String(
-    src.hyphenationIntensity ?? DEFAULT_SETTINGS.hyphenationIntensity
+  const minLettersBeforeHyphen = clampNumber(
+    Number(src.minLettersBeforeHyphen ?? DEFAULT_SETTINGS.minLettersBeforeHyphen),
+    1, 5
   );
-  const hyphenationIntensity =
-    hyphenationIntensityRaw === "soft" ||
-    hyphenationIntensityRaw === "normal" ||
-    hyphenationIntensityRaw === "aggressive"
-      ? hyphenationIntensityRaw
-      : DEFAULT_SETTINGS.hyphenationIntensity;
 
-  const maxHyphensPerParagraph = clampNumber(
-    Number(src.maxHyphensPerParagraph ?? DEFAULT_SETTINGS.maxHyphensPerParagraph),
-    0, 20
+  const minLettersAfterHyphen = clampNumber(
+    Number(src.minLettersAfterHyphen ?? DEFAULT_SETTINGS.minLettersAfterHyphen),
+    1, 5
+  );
+
+  const maxConsecutiveHyphens = clampNumber(
+    Number(src.maxConsecutiveHyphens ?? DEFAULT_SETTINGS.maxConsecutiveHyphens),
+    0, 5
   );
 
   const minPercent = clampNumber(
@@ -158,8 +154,9 @@ function normalizeSettings(input) {
     hangingHyphen,
     optimizeLetterSpacing,
     minWordLengthForHyphenation,
-    hyphenationIntensity,
-    maxHyphensPerParagraph,
+    minLettersBeforeHyphen,
+    minLettersAfterHyphen,
+    maxConsecutiveHyphens,
     letterSpacingMinPercent: sortedMin,
     letterSpacingDesiredPercent: sortedDesired,
     letterSpacingMaxPercent: sortedMax,
@@ -291,14 +288,15 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
     options && typeof options.minWordLengthForHyphenation === "number"
       ? options.minWordLengthForHyphenation
       : 4;
-  const intensity =
-    options && typeof options.hyphenationIntensity === "string"
-      ? options.hyphenationIntensity
-      : "normal";
-  const minIntensityRank =
-    intensity in HYPHENATION_INTENSITY_ORDER
-      ? HYPHENATION_INTENSITY_ORDER[intensity]
-      : HYPHENATION_INTENSITY_ORDER.normal;
+  const minBefore =
+    options && typeof options.minLettersBeforeHyphen === "number"
+      ? options.minLettersBeforeHyphen
+      : 2;
+  const minAfter =
+    options && typeof options.minLettersAfterHyphen === "number"
+      ? options.minLettersAfterHyphen
+      : 3;
+
   const match = token.match(RUSSIAN_TOKEN_REGEX);
   if (!match) {
     return null;
@@ -320,15 +318,8 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
   for (let i = parts.length - 1; i >= 1; i -= 1) {
     const leftCore = parts.slice(0, i).join("");
     const rightCore = parts.slice(i).join("");
-    const shortFragment = Math.min(leftCore.length, rightCore.length);
-    const fragmentIntensityRank =
-      shortFragment >= 3
-        ? HYPHENATION_INTENSITY_ORDER.soft
-        : shortFragment === 2
-          ? HYPHENATION_INTENSITY_ORDER.normal
-          : HYPHENATION_INTENSITY_ORDER.aggressive;
 
-    if (fragmentIntensityRank < minIntensityRank) {
+    if (leftCore.length < minBefore || rightCore.length < minAfter) {
       continue;
     }
 
@@ -363,6 +354,11 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
       ? options.maxHyphensPerParagraph
       : 0;
 
+  const maxConsecutiveHyphens =
+    options && typeof options.maxConsecutiveHyphens === "number"
+      ? options.maxConsecutiveHyphens
+      : 0;
+
   let totalBreakCount = 0;
   let totalUnsolvedSparseLines = 0;
   const transformedParagraphs = [];
@@ -379,6 +375,7 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
     let currentLine = "";
     let pendingSpaces = "";
     let insertedBreaks = 0;
+    let consecutiveHyphenLines = 0;
 
     for (const token of tokens) {
       if (SPACE_TOKEN_REGEX.test(token)) {
@@ -400,6 +397,8 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
 
         const reachedParagraphLimit =
           maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
+        const reachedConsecutiveLimit =
+          maxConsecutiveHyphens > 0 && consecutiveHyphenLines >= maxConsecutiveHyphens;
         const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
 
         if (linePrefix.length > 0) {
@@ -407,26 +406,27 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           const isLineSparse =
             lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
 
+          const canBreak = (!reachedParagraphLimit || isLineSparse) && !reachedConsecutiveLimit;
+
           let breakPoint = null;
-          if (!reachedParagraphLimit || isLineSparse) {
-            breakPoint = findBestBreakInToken(
-              chunk,
-              remainingWidth,
-              measureWidth,
-              options
-            );
+          if (canBreak) {
+            breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
           }
 
-          if (!breakPoint && isLineSparse) {
+          // Sparse-line fallback: relax Before/After limits to 1 letter each.
+          // This finds hyphenation points that stricter settings would skip.
+          if (!breakPoint && isLineSparse && !reachedConsecutiveLimit) {
             breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
               ...options,
-              hyphenationIntensity: "soft"
+              minLettersBeforeHyphen: 1,
+              minLettersAfterHyphen: 1
             });
           }
 
           if (breakPoint) {
             result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
             insertedBreaks += 1;
+            consecutiveHyphenLines += 1;
             chunk = breakPoint.right;
             currentLine = "";
             linePrefix = "";
@@ -437,6 +437,7 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             totalUnsolvedSparseLines += 1;
           }
 
+          consecutiveHyphenLines = 0;
           linePrefix = "";
           continue;
         }
@@ -448,18 +449,21 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           break;
         }
 
-        const breakPoint = reachedParagraphLimit
-          ? null
-          : findBestBreakInToken(chunk, maxWidth, measureWidth, options);
+        const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
+        const breakPoint = canBreakLong
+          ? findBestBreakInToken(chunk, maxWidth, measureWidth, options)
+          : null;
         if (breakPoint) {
           result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
           insertedBreaks += 1;
+          consecutiveHyphenLines += 1;
           chunk = breakPoint.right;
           currentLine = "";
           linePrefix = "";
           continue;
         }
 
+        consecutiveHyphenLines = 0;
         result += chunk;
         currentLine = chunk;
         chunk = "";

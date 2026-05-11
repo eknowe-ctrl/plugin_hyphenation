@@ -298,14 +298,20 @@
 <div class="settings-panel" id="settings-panel">
 
   <div>
-    <span class="label">Интенсивность переносов</span>
-    <div class="segmented">
-      <input type="radio" name="intensity" id="int-soft"   value="soft" />
-      <label for="int-soft">Мягкая</label>
-      <input type="radio" name="intensity" id="int-normal" value="normal" />
-      <label for="int-normal">Нормальная</label>
-      <input type="radio" name="intensity" id="int-aggr"   value="aggressive" />
-      <label for="int-aggr">Максимальная</label>
+    <span class="label">Переносы</span>
+    <div class="ls-row">
+      <div class="ls-field">
+        <span class="sub-label">После первой</span>
+        <input type="number" id="minBefore" min="1" max="5" step="1" />
+      </div>
+      <div class="ls-field">
+        <span class="sub-label">До последней</span>
+        <input type="number" id="minAfter" min="1" max="5" step="1" />
+      </div>
+      <div class="ls-field">
+        <span class="sub-label">Подряд макс.</span>
+        <input type="number" id="maxConsec" min="0" max="5" step="1" />
+      </div>
     </div>
   </div>
 
@@ -368,10 +374,6 @@
     <span class="label-text">Мин. длина слова</span>
     <input type="number" id="minWordLen" min="4" max="12" step="1" />
   </div>
-  <div class="field-row">
-    <span class="label-text">Макс. переносов / абзац</span>
-    <input type="number" id="maxHyphens" min="0" max="20" step="1" />
-  </div>
 
 </div>
 
@@ -424,25 +426,13 @@
   };
   var numFields = {
     minWordLengthForHyphenation: document.getElementById('minWordLen'),
-    maxHyphensPerParagraph:      document.getElementById('maxHyphens'),
+    minLettersBeforeHyphen:      document.getElementById('minBefore'),
+    minLettersAfterHyphen:       document.getElementById('minAfter'),
+    maxConsecutiveHyphens:       document.getElementById('maxConsec'),
     letterSpacingMinPercent:     document.getElementById('lsMin'),
     letterSpacingDesiredPercent: document.getElementById('lsDesired'),
     letterSpacingMaxPercent:     document.getElementById('lsMax')
   };
-
-  function getIntensity() {
-    var els = document.querySelectorAll('input[name="intensity"]');
-    for (var i = 0; i < els.length; i++) {
-      if (els[i].checked) return els[i].value;
-    }
-    return 'normal';
-  }
-
-  function setIntensity(val) {
-    document.querySelectorAll('input[name="intensity"]').forEach(function (el) {
-      el.checked = (el.value === val);
-    });
-  }
 
   function renderSettings(s) {
     if (!s) return;
@@ -451,11 +441,12 @@
     });
     var nf = numFields;
     if (typeof s.minWordLengthForHyphenation === 'number') nf.minWordLengthForHyphenation.value = s.minWordLengthForHyphenation;
-    if (typeof s.maxHyphensPerParagraph      === 'number') nf.maxHyphensPerParagraph.value      = s.maxHyphensPerParagraph;
+    if (typeof s.minLettersBeforeHyphen      === 'number') nf.minLettersBeforeHyphen.value      = s.minLettersBeforeHyphen;
+    if (typeof s.minLettersAfterHyphen       === 'number') nf.minLettersAfterHyphen.value       = s.minLettersAfterHyphen;
+    if (typeof s.maxConsecutiveHyphens       === 'number') nf.maxConsecutiveHyphens.value       = s.maxConsecutiveHyphens;
     if (typeof s.letterSpacingMinPercent     === 'number') nf.letterSpacingMinPercent.value     = s.letterSpacingMinPercent;
     if (typeof s.letterSpacingDesiredPercent === 'number') nf.letterSpacingDesiredPercent.value = s.letterSpacingDesiredPercent;
     if (typeof s.letterSpacingMaxPercent     === 'number') nf.letterSpacingMaxPercent.value     = s.letterSpacingMaxPercent;
-    if (s.hyphenationIntensity) setIntensity(s.hyphenationIntensity);
   }
 
   function collectSettings() {
@@ -464,9 +455,10 @@
       preventOrphans:        toggleFields.preventOrphans.checked,
       hangingHyphen:         toggleFields.hangingHyphen.checked,
       optimizeLetterSpacing: toggleFields.optimizeLetterSpacing.checked,
-      hyphenationIntensity:  getIntensity(),
       minWordLengthForHyphenation: Number(numFields.minWordLengthForHyphenation.value) || 5,
-      maxHyphensPerParagraph:      Number(numFields.maxHyphensPerParagraph.value)      || 0,
+      minLettersBeforeHyphen:      Number(numFields.minLettersBeforeHyphen.value)      || 2,
+      minLettersAfterHyphen:       Number(numFields.minLettersAfterHyphen.value)       || 3,
+      maxConsecutiveHyphens:       Number(numFields.maxConsecutiveHyphens.value)       || 2,
       letterSpacingMinPercent:     Number(numFields.letterSpacingMinPercent.value)     || -3,
       letterSpacingDesiredPercent: Number(numFields.letterSpacingDesiredPercent.value) || 0,
       letterSpacingMaxPercent:     Number(numFields.letterSpacingMaxPercent.value)     || 2,
@@ -478,11 +470,6 @@
   resetBtn.addEventListener('click', function () { send('reset'); });
 
   Object.values(toggleFields).concat(Object.values(numFields)).forEach(function (el) {
-    el.addEventListener('change', function () {
-      send('save-settings', { settings: collectSettings() });
-    });
-  });
-  document.querySelectorAll('input[name="intensity"]').forEach(function (el) {
     el.addEventListener('change', function () {
       send('save-settings', { settings: collectSettings() });
     });
