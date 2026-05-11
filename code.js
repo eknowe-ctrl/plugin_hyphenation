@@ -928,7 +928,9 @@
         try {
           yield loadFontsForNode(node);
           const original = node.characters;
-          const originalLetterSpacing = getNodeLetterSpacing(node);
+          const existingSnapshot = readNodeSnapshot(node);
+          const originalLetterSpacing = existingSnapshot && existingSnapshot.letterSpacing ? existingSnapshot.letterSpacing : getNodeLetterSpacing(node);
+          const cleanOriginal = normalizeTextForRehyphenation(original);
           let transformed = original;
           let hasNodeChanges = false;
           if (isResetMode) {
@@ -939,14 +941,13 @@
             transformed = resetHyphenationText(original);
           } else {
             const mixedTypography = hasMixedTypography(node);
-            let normalized = normalizeTextForRehyphenation(original);
-            let preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
+            let preparedText = settings.preventOrphans ? preventRussianOrphans(cleanOriginal) : cleanOriginal;
             if (settings.optimizeLetterSpacing && !mixedTypography) {
               const currentSpacing = getNodeLetterSpacing(node);
-              const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
+              const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);
               const candidates = getLetterSpacingCandidates(node, settings);
               let bestText = preparedText;
-              let bestSpacing = currentSpacing;
+              let bestSpacing = originalLetterSpacing;
               let bestBreakCount = Number.POSITIVE_INFINITY;
               let bestSparseCount = Number.POSITIVE_INFINITY;
               let bestDesiredPenalty = Number.POSITIVE_INFINITY;
@@ -1012,7 +1013,7 @@
             if (isResetMode) {
               clearNodeSnapshot(node);
             } else {
-              writeNodeSnapshot(node, original, originalLetterSpacing);
+              writeNodeSnapshot(node, cleanOriginal, originalLetterSpacing);
             }
             changedNodes += 1;
           }

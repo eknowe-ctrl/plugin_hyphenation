@@ -898,7 +898,19 @@ async function processTextNodes(textNodes, mode, settings) {
       await loadFontsForNode(node);
 
       const original = node.characters;
-      const originalLetterSpacing = getNodeLetterSpacing(node);
+
+      // Existing snapshot (from a previous Apply) holds the true pre-plugin
+      // text and letter spacing. We preserve both across repeated Apply calls
+      // so that Reset always returns to the user's original state.
+      const existingSnapshot = readNodeSnapshot(node);
+
+      const originalLetterSpacing = existingSnapshot && existingSnapshot.letterSpacing
+        ? existingSnapshot.letterSpacing
+        : getNodeLetterSpacing(node);
+
+      // Always snapshot the normalised text so old plugin markers are stripped.
+      const cleanOriginal = normalizeTextForRehyphenation(original);
+
       let transformed = original;
       let hasNodeChanges = false;
 
@@ -911,19 +923,17 @@ async function processTextNodes(textNodes, mode, settings) {
       } else {
         const mixedTypography = hasMixedTypography(node);
 
-        let normalized = normalizeTextForRehyphenation(original);
-
         let preparedText = settings.preventOrphans
-          ? preventRussianOrphans(normalized)
-          : normalized;
+          ? preventRussianOrphans(cleanOriginal)
+          : cleanOriginal;
 
         if (settings.optimizeLetterSpacing && !mixedTypography) {
           const currentSpacing = getNodeLetterSpacing(node);
-          const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
+          const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);
           const candidates = getLetterSpacingCandidates(node, settings);
 
           let bestText = preparedText;
-          let bestSpacing = currentSpacing;
+          let bestSpacing = originalLetterSpacing;
           let bestBreakCount = Number.POSITIVE_INFINITY;
           let bestSparseCount = Number.POSITIVE_INFINITY;
           let bestDesiredPenalty = Number.POSITIVE_INFINITY;
@@ -1002,7 +1012,7 @@ async function processTextNodes(textNodes, mode, settings) {
         if (isResetMode) {
           clearNodeSnapshot(node);
         } else {
-          writeNodeSnapshot(node, original, originalLetterSpacing);
+          writeNodeSnapshot(node, cleanOriginal, originalLetterSpacing);
         }
         changedNodes += 1;
       }
