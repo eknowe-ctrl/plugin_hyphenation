@@ -16,10 +16,10 @@ const SETTINGS_STORAGE_KEY = "hyphenationSettingsV6";
 const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
-const UI_WINDOW_WIDTH = 300;
-const UI_INITIAL_HEIGHT = 700;
+const UI_WINDOW_WIDTH = 360;
+const UI_INITIAL_HEIGHT = 766;
 const UI_MIN_HEIGHT = 300;
-const UI_MAX_HEIGHT = 900;
+const UI_MAX_HEIGHT = 1012;
 
 
 const ORPHAN_WORDS = new Set([
@@ -1289,7 +1289,10 @@ async function run() {
 
     if (message.type === "resize-ui") {
       try {
-        figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+        const w = (typeof message.width === "number" && message.width > 0)
+          ? Math.round(Math.max(200, Math.min(800, message.width)))
+          : UI_WINDOW_WIDTH;
+        figma.ui.resize(w, normalizeUiHeight(message.height));
       } catch (error) {
         console.warn("Не удалось изменить размер UI плагина", error);
       }

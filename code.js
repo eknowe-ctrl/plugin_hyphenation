@@ -186,10 +186,10 @@
   var SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
-  var UI_WINDOW_WIDTH = 300;
-  var UI_INITIAL_HEIGHT = 700;
+  var UI_WINDOW_WIDTH = 360;
+  var UI_INITIAL_HEIGHT = 766;
   var UI_MIN_HEIGHT = 300;
-  var UI_MAX_HEIGHT = 900;
+  var UI_MAX_HEIGHT = 1012;
   var ORPHAN_WORDS = /* @__PURE__ */ new Set([
     "\u0432",
     "\u0441",
@@ -1224,7 +1224,8 @@
         }
         if (message.type === "resize-ui") {
           try {
-            figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+            const w = typeof message.width === "number" && message.width > 0 ? Math.round(Math.max(200, Math.min(800, message.width))) : UI_WINDOW_WIDTH;
+            figma.ui.resize(w, normalizeUiHeight(message.height));
           } catch (error) {
             console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u0430\u0437\u043C\u0435\u0440 UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
           }
