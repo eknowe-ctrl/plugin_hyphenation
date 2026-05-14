@@ -809,41 +809,9 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
       continue;
     }
 
-    // First pass: greedy line-by-line hyphenation
-    let paraResult = processOneParagraph(
+    const paraResult = processOneParagraph(
       line, maxWidth, measureWidth, options, maxHyphensPara, maxConsecHyphens
     );
-
-    // Second pass: for each hyphen with a short tail (≤ SECOND_PASS_TAIL_MAX chars),
-    // try forbidding that specific break and re-running. If the resulting paragraph
-    // has lower total badness (fewer / smaller gaps in justified lines), keep it.
-    // This fixes patterns like "обеспече- | ние нашей деятельности…" where a short
-    // tail leaves the next line very sparse.
-    const shortTailBreaks = extractShortTailCandidates(paraResult.text);
-    if (shortTailBreaks.length > 0) {
-      const firstLines = simulateParagraphLines(paraResult.text, maxWidth, measureWidth);
-      let bestBadness = computeParagraphBadness(firstLines, maxWidth, measureWidth);
-      let bestText = paraResult.text;
-
-      for (const { core, leftCore } of shortTailBreaks.slice(0, 5)) {
-        const altResult = processOneParagraph(
-          line, maxWidth, measureWidth,
-          { ...options, forbiddenBreaks: new Set([`${core}:${leftCore}`]) },
-          maxHyphensPara, maxConsecHyphens
-        );
-        const altLines = simulateParagraphLines(altResult.text, maxWidth, measureWidth);
-        const altBadness = computeParagraphBadness(altLines, maxWidth, measureWidth);
-
-        if (altBadness < bestBadness - 1e-6) {
-          bestBadness = altBadness;
-          bestText = altResult.text;
-        }
-      }
-
-      if (bestText !== paraResult.text) {
-        paraResult = { ...paraResult, text: bestText };
-      }
-    }
 
     totalBreakCount += paraResult.breakCount;
     totalUnsolvedSparseLines += paraResult.unsolvedSparseLines;

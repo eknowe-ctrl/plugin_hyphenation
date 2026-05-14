@@ -529,70 +529,6 @@
     }
     return null;
   }
-  function simulateParagraphLines(paraText, maxWidth, measureWidth) {
-    const tokens = paraText.match(TOKEN_REGEX) || [];
-    const lines = [];
-    let currentLine = "";
-    let pendingSpaces = "";
-    for (const token of tokens) {
-      if (SPACE_TOKEN_REGEX.test(token)) {
-        pendingSpaces += token;
-        continue;
-      }
-      if (token.includes(ZERO_WIDTH_SPACE)) {
-        const cleanTok = token.replace(/​/g, "");
-        currentLine += pendingSpaces + cleanTok;
-        lines.push(currentLine);
-        currentLine = "";
-        pendingSpaces = "";
-        continue;
-      }
-      const candidate = currentLine ? currentLine + pendingSpaces + token : token;
-      if (!currentLine || fitsWithinWidth(candidate, maxWidth, measureWidth)) {
-        currentLine = candidate;
-      } else {
-        if (currentLine) lines.push(currentLine);
-        currentLine = token;
-      }
-      pendingSpaces = "";
-    }
-    if (currentLine.trim()) lines.push(currentLine);
-    return lines;
-  }
-  function computeParagraphBadness(lines, maxWidth, measureWidth) {
-    if (lines.length <= 1) return 0;
-    let badness = 0;
-    for (let i = 0; i < lines.length - 1; i++) {
-      const fill = maxWidth > 0 ? measureWidth(lines[i]) / maxWidth : 1;
-      const deficit = Math.max(0, SPARSE_LINE_FILL_THRESHOLD - fill);
-      badness += deficit * deficit;
-    }
-    return badness;
-  }
-  var SECOND_PASS_TAIL_MAX = 4;
-  function extractShortTailCandidates(resultText) {
-    const tokens = resultText.match(TOKEN_REGEX) || [];
-    const candidates = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const tok = tokens[i];
-      if (!tok.includes(ZERO_WIDTH_SPACE)) continue;
-      const leftFull = tok.replace(/-​$/, "");
-      const leftMatch = leftFull.match(RUSSIAN_TOKEN_REGEX);
-      if (!leftMatch) continue;
-      const leftCore = leftMatch[2];
-      let j = i + 1;
-      while (j < tokens.length && SPACE_TOKEN_REGEX.test(tokens[j])) j++;
-      if (j >= tokens.length) continue;
-      const rightClean = tokens[j].replace(/-​[\s\S]*$/, "");
-      const rightMatch = rightClean.match(RUSSIAN_TOKEN_REGEX);
-      if (!rightMatch) continue;
-      const rightCore = rightMatch[2];
-      if (rightCore.length <= SECOND_PASS_TAIL_MAX) {
-        candidates.push({ core: leftCore + rightCore, leftCore });
-      }
-    }
-    return candidates;
-  }
   function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphensPara, maxConsecHyphens) {
     const tokens = lineText.match(TOKEN_REGEX);
     if (!tokens) return { text: lineText, breakCount: 0, unsolvedSparseLines: 0 };
@@ -777,7 +713,7 @@
         transformedParagraphs.push(line);
         continue;
       }
-      let paraResult = processOneParagraph(
+      const paraResult = processOneParagraph(
         line,
         maxWidth,
         measureWidth,
@@ -785,31 +721,6 @@
         maxHyphensPara,
         maxConsecHyphens
       );
-      const shortTailBreaks = extractShortTailCandidates(paraResult.text);
-      if (shortTailBreaks.length > 0) {
-        const firstLines = simulateParagraphLines(paraResult.text, maxWidth, measureWidth);
-        let bestBadness = computeParagraphBadness(firstLines, maxWidth, measureWidth);
-        let bestText = paraResult.text;
-        for (const { core, leftCore } of shortTailBreaks.slice(0, 5)) {
-          const altResult = processOneParagraph(
-            line,
-            maxWidth,
-            measureWidth,
-            __spreadProps(__spreadValues({}, options), { forbiddenBreaks: /* @__PURE__ */ new Set([`${core}:${leftCore}`]) }),
-            maxHyphensPara,
-            maxConsecHyphens
-          );
-          const altLines = simulateParagraphLines(altResult.text, maxWidth, measureWidth);
-          const altBadness = computeParagraphBadness(altLines, maxWidth, measureWidth);
-          if (altBadness < bestBadness - 1e-6) {
-            bestBadness = altBadness;
-            bestText = altResult.text;
-          }
-        }
-        if (bestText !== paraResult.text) {
-          paraResult = __spreadProps(__spreadValues({}, paraResult), { text: bestText });
-        }
-      }
       totalBreakCount += paraResult.breakCount;
       totalUnsolvedSparseLines += paraResult.unsolvedSparseLines;
       transformedParagraphs.push(paraResult.text);
