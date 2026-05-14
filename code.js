@@ -174,8 +174,8 @@
   var ZERO_WIDTH_SPACE = "\u200B";
   var INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
   var hypher = new Hypher(russianPatterns);
-  var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
-  var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
+  var TOKEN_REGEX = /(\n|[^\S\n ]+|(?:[^\s]| )+)/g;
+  var SPACE_TOKEN_REGEX = /^[^\S\n ]+$/;
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
   var WIDTH_EPSILON = 0.01;
   var SPARSE_LINE_FILL_THRESHOLD = 0.75;
@@ -327,6 +327,30 @@
       letterSpacingStepPercent: stepPercent
     };
   }
+  function deriveSettingsForNode(node, baseSettings) {
+    const fontSize = typeof node.fontSize === "number" && node.fontSize > 0 ? node.fontSize : 16;
+    const charsPerLine = node.width / (fontSize * 0.55);
+    if (charsPerLine >= 45) {
+      return baseSettings;
+    }
+    const s = __spreadValues({}, baseSettings);
+    if (charsPerLine < 30) {
+      s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
+      s.minLettersBeforeHyphen = Math.min(s.minLettersBeforeHyphen, 2);
+      s.minLettersAfterHyphen = Math.min(s.minLettersAfterHyphen, 2);
+      s.letterSpacingMinPercent = Math.min(s.letterSpacingMinPercent, -5);
+    } else {
+      s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
+      s.minLettersAfterHyphen = Math.min(s.minLettersAfterHyphen, 3);
+      s.letterSpacingMinPercent = Math.min(s.letterSpacingMinPercent, -4);
+    }
+    s.letterSpacingMinPercent = Math.min(s.letterSpacingMinPercent, s.letterSpacingMaxPercent);
+    s.letterSpacingDesiredPercent = Math.max(
+      s.letterSpacingMinPercent,
+      Math.min(s.letterSpacingDesiredPercent, s.letterSpacingMaxPercent)
+    );
+    return s;
+  }
   function loadRuntimeSettings() {
     return __async(this, null, function* () {
       try {
@@ -372,17 +396,6 @@
   var NBSP_ADDR_RE = /\b(проф|акад|доц|тов|ул|пр|пл|пос|им|кв|оз|г|д|р|о|с)\.[^\S\n]+(?=[А-ЯЁ0-9])/gi;
   function applyNonBreakingSpaces(text) {
     return text.replace(NBSP_MONTHS_RE, `$1\xA0$2`).replace(NBSP_YEAR_RE, `$1\xA0$2`).replace(NBSP_PERCENT_RE, `$1\xA0$2`).replace(NBSP_TEMP_RE, `$1\xA0$2`).replace(NBSP_UNITS_RE, `$1\xA0$2`).replace(NBSP_INITIALS_RE, `$1.\xA0`).replace(NBSP_ADDR_RE, `$1.\xA0`);
-  }
-  function preventRussianOrphans(text) {
-    return text.replace(
-      /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})[^\S\n]+(?=[А-Яа-яЁё0-9])/g,
-      (match, prefix, word) => {
-        if (!ORPHAN_WORDS.has(word.toLowerCase())) {
-          return match;
-        }
-        return `${prefix}${word}${NBSP}`;
-      }
-    );
   }
   function serializeLetterSpacing(letterSpacing) {
     if (!letterSpacing || letterSpacing === figma.mixed) {
@@ -436,6 +449,46 @@
       node.setPluginData(SNAPSHOT_PLUGIN_KEY, "");
     } catch (error) {
       console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0447\u0438\u0441\u0442\u0438\u0442\u044C snapshot \u0441\u043B\u043E\u044F", error);
+    }
+  }
+  function removeSpuriousHyphens(node) {
+    const text = node.characters;
+    const markerLen = INSERTED_BREAK_MARKER.length;
+    const positions = [];
+    let searchFrom = 0;
+    while (true) {
+      const pos = text.indexOf(INSERTED_BREAK_MARKER, searchFrom);
+      if (pos === -1) break;
+      positions.push(pos);
+      searchFrom = pos + 1;
+    }
+    if (positions.length === 0) return false;
+    const probe = node.clone();
+    probe.visible = false;
+    probe.x = -1e5;
+    probe.y = -1e5;
+    probe.textAutoResize = "HEIGHT";
+    try {
+      probe.characters = text;
+      const baselineHeight = probe.height;
+      const toRemove = [];
+      for (const pos of positions) {
+        const testText = text.slice(0, pos) + text.slice(pos + markerLen);
+        probe.characters = testText;
+        if (Math.abs(probe.height - baselineHeight) < 0.5) {
+          toRemove.push(pos);
+        }
+      }
+      if (toRemove.length === 0) return false;
+      let cleanText = text;
+      for (let i = toRemove.length - 1; i >= 0; i--) {
+        const p = toRemove[i];
+        cleanText = cleanText.slice(0, p) + cleanText.slice(p + markerLen);
+      }
+      node.characters = cleanText;
+      return true;
+    } finally {
+      probe.remove();
     }
   }
   function fitsWithinWidth(text, maxWidth, measureWidth) {
@@ -501,11 +554,19 @@
       let pendingSpaces = "";
       let insertedBreaks = 0;
       let consecutiveHyphenLines = 0;
-      for (const token of tokens) {
+      let lineWordCount = 0;
+      let lastWordInfo = null;
+      const processingQueue = Array.from(tokens);
+      let qIdx = 0;
+      while (qIdx < processingQueue.length) {
+        const token = processingQueue[qIdx++];
         if (SPACE_TOKEN_REGEX.test(token)) {
           pendingSpaces += token;
           continue;
         }
+        const resultLenBeforeSpaces = result.length;
+        const currentLineBeforeSpaces = currentLine;
+        const spacesForWord = pendingSpaces;
         result += pendingSpaces;
         let chunk = token;
         let linePrefix = `${currentLine}${pendingSpaces}`;
@@ -514,6 +575,38 @@
             result += chunk;
             currentLine = `${linePrefix}${chunk}`;
             chunk = "";
+            lineWordCount++;
+            const prevLastWordInfo = lastWordInfo;
+            lastWordInfo = {
+              token,
+              resultLenBeforeSpaces,
+              spacesBeforeWord: spacesForWord,
+              currentLineBefore: currentLineBeforeSpaces
+            };
+            if (options && options.preventOrphans && currentLineBeforeSpaces.length > 0) {
+              const lastPart = token.split(NBSP).pop();
+              const cyrillicOnly = lastPart.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
+              if (ORPHAN_WORDS.has(cyrillicOnly)) {
+                let pi = qIdx;
+                while (pi < processingQueue.length && SPACE_TOKEN_REGEX.test(processingQueue[pi])) pi++;
+                if (pi < processingQueue.length) {
+                  const nextTok = processingQueue[pi];
+                  const interSp = processingQueue.slice(qIdx, pi).join("");
+                  const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9]/.test(nextTok);
+                  if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
+                    result = result.slice(0, resultLenBeforeSpaces);
+                    currentLine = currentLineBeforeSpaces;
+                    lineWordCount = Math.max(0, lineWordCount - 1);
+                    lastWordInfo = prevLastWordInfo;
+                    processingQueue.splice(qIdx, pi - qIdx + 1);
+                    processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
+                    if (spacesForWord.length > 0) {
+                      processingQueue.splice(qIdx, 0, spacesForWord);
+                    }
+                  }
+                }
+              }
+            }
             break;
           }
           const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
@@ -540,19 +633,57 @@
               chunk = breakPoint2.right;
               currentLine = "";
               linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
               continue;
             }
             if (isLineSparse) {
               totalUnsolvedSparseLines += 1;
             }
+            if ((lineWordCount === 2 || lineWordCount === 3 && isLineSparse) && lastWordInfo !== null && !reachedConsecutiveLimit) {
+              const lw = lastWordInfo;
+              const remainingForLw = maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
+              const lbBreak = findBestBreakInToken(
+                lw.token,
+                remainingForLw,
+                measureWidth,
+                options
+              );
+              if (lbBreak) {
+                result = result.slice(0, lw.resultLenBeforeSpaces);
+                result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
+                insertedBreaks += 1;
+                consecutiveHyphenLines += 1;
+                if (spacesForWord.length > 0) {
+                  processingQueue.splice(qIdx, 0, lbBreak.right, spacesForWord, token);
+                } else {
+                  processingQueue.splice(qIdx, 0, lbBreak.right, token);
+                }
+                currentLine = "";
+                linePrefix = "";
+                lineWordCount = 0;
+                lastWordInfo = null;
+                chunk = "";
+                break;
+              }
+            }
             consecutiveHyphenLines = 0;
             linePrefix = "";
+            lineWordCount = 0;
+            lastWordInfo = null;
             continue;
           }
           if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
             result += chunk;
             currentLine = chunk;
             chunk = "";
+            lineWordCount++;
+            lastWordInfo = {
+              token,
+              resultLenBeforeSpaces,
+              spacesBeforeWord: spacesForWord,
+              currentLineBefore: currentLineBeforeSpaces
+            };
             break;
           }
           const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
@@ -564,12 +695,21 @@
             chunk = breakPoint.right;
             currentLine = "";
             linePrefix = "";
+            lineWordCount = 0;
+            lastWordInfo = null;
             continue;
           }
           consecutiveHyphenLines = 0;
           result += chunk;
           currentLine = chunk;
           chunk = "";
+          lineWordCount++;
+          lastWordInfo = {
+            token,
+            resultLenBeforeSpaces,
+            spacesBeforeWord: spacesForWord,
+            currentLineBefore: currentLineBeforeSpaces
+          };
         }
         pendingSpaces = "";
       }
@@ -953,14 +1093,12 @@
             transformed = resetHyphenationText(original);
           } else {
             const mixedTypography = hasMixedTypography(node);
-            let preparedText = settings.preventOrphans ? preventRussianOrphans(cleanOriginal) : cleanOriginal;
-            if (settings.autoNbsp) {
-              preparedText = applyNonBreakingSpaces(preparedText);
-            }
+            const nodeSettings = deriveSettingsForNode(node, settings);
+            let preparedText = settings.autoNbsp ? applyNonBreakingSpaces(cleanOriginal) : cleanOriginal;
             if (settings.optimizeLetterSpacing && !mixedTypography) {
               const currentSpacing = getNodeLetterSpacing(node);
               const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);
-              const candidates = getLetterSpacingCandidates(node, settings);
+              const candidates = getLetterSpacingCandidates(node, nodeSettings);
               let bestText = preparedText;
               let bestSpacing = originalLetterSpacing;
               let bestBreakCount = Number.POSITIVE_INFINITY;
@@ -975,12 +1113,12 @@
                     preparedText,
                     node.width,
                     measurer.measure,
-                    settings
+                    nodeSettings
                   );
                   const breakCount = hyphenResult.breakCount;
                   const sparseCount = hyphenResult.unsolvedSparseLines;
                   const desiredPenalty = Math.abs(
-                    candidate.percentValue - settings.letterSpacingDesiredPercent
+                    candidate.percentValue - nodeSettings.letterSpacingDesiredPercent
                   );
                   const currentPenalty = Math.abs(
                     candidate.percentValue - currentSpacingPercent
@@ -1013,7 +1151,7 @@
                   preparedText,
                   node.width,
                   measurer.measure,
-                  settings
+                  nodeSettings
                 ).text;
               } finally {
                 measurer.destroy();
@@ -1022,6 +1160,7 @@
           }
           if (transformed !== original) {
             node.characters = transformed;
+            removeSpuriousHyphens(node);
             hasNodeChanges = true;
           }
           if (hasNodeChanges) {

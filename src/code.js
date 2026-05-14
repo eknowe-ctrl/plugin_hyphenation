@@ -4,8 +4,12 @@ const russianPatterns = require("hyphenation.ru");
 const ZERO_WIDTH_SPACE = "\u200B";
 const INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
 const hypher = new Hypher(russianPatterns);
-const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
-const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
+// NBSP ( ) must NOT be treated as a breakable space: it should stay
+// attached to adjacent word characters so "с точки" is one token.
+// In JS, \s matches  , so we explicitly exclude it from the space class
+// and include it in the word class via the alternation (?:[^\s]| )+.
+const TOKEN_REGEX = /(\n|[^\S\n ]+|(?:[^\s]| )+)/g;
+const SPACE_TOKEN_REGEX = /^[^\S\n ]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
 const WIDTH_EPSILON = 0.01;
 const SPARSE_LINE_FILL_THRESHOLD = 0.75;
@@ -168,6 +172,45 @@ function normalizeSettings(input) {
   };
 }
 
+// Derives per-node hyphenation settings from block geometry.
+// Narrow columns (few characters per line) need more aggressive hyphenation and
+// a wider letter-spacing range than the user's global settings may specify.
+// Math.min/max ensure we only make settings MORE aggressive, never less.
+function deriveSettingsForNode(node, baseSettings) {
+  const fontSize = typeof node.fontSize === "number" && node.fontSize > 0
+    ? node.fontSize : 16;
+  // 0.55 ≈ average Russian character width as a fraction of font size.
+  const charsPerLine = node.width / (fontSize * 0.55);
+
+  if (charsPerLine >= 45) {
+    return baseSettings; // wide column — user settings are fine
+  }
+
+  const s = { ...baseSettings };
+
+  if (charsPerLine < 30) {
+    // Narrow column: hyphenate shorter words, allow tighter splits, compress more.
+    s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
+    s.minLettersBeforeHyphen      = Math.min(s.minLettersBeforeHyphen, 2);
+    s.minLettersAfterHyphen       = Math.min(s.minLettersAfterHyphen, 2);
+    s.letterSpacingMinPercent     = Math.min(s.letterSpacingMinPercent, -5);
+  } else {
+    // Medium column (30–44 chars): moderate tightening.
+    s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
+    s.minLettersAfterHyphen       = Math.min(s.minLettersAfterHyphen, 3);
+    s.letterSpacingMinPercent     = Math.min(s.letterSpacingMinPercent, -4);
+  }
+
+  // Keep min ≤ desired ≤ max consistent after any adjustments.
+  s.letterSpacingMinPercent =
+    Math.min(s.letterSpacingMinPercent, s.letterSpacingMaxPercent);
+  s.letterSpacingDesiredPercent =
+    Math.max(s.letterSpacingMinPercent,
+      Math.min(s.letterSpacingDesiredPercent, s.letterSpacingMaxPercent));
+
+  return s;
+}
+
 async function loadRuntimeSettings() {
   try {
     const saved = await figma.clientStorage.getAsync(SETTINGS_STORAGE_KEY);
@@ -252,15 +295,24 @@ function applyNonBreakingSpaces(text) {
 }
 
 function preventRussianOrphans(text) {
-  return text.replace(
-    /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})[^\S\n]+(?=[А-Яа-яЁё0-9])/g,
-    (match, prefix, word) => {
+  // Lookbehind (?<=...) makes the prefix non-consuming. Without it, a non-orphan
+  // 3-letter word like "чем" consumes the trailing space, so the next match attempt
+  // starts at "у" with no preceding space visible to the pattern — "у" is skipped.
+  // Separator [^\S\n\u00A0]+ excludes NBSP: once "у" gets NBSP, the next pass
+  // won't re-consume that NBSP as a separator and re-match "у" (no-op loop).
+  const pattern = /(?:^|(?<=[\s(«„“”']))([\u0410-\u042F\u0401\u0430-\u044F\u0451]{1,3})[^\S\n\u00A0]+(?=[\u0410-\u042F\u0401\u0430-\u044F\u04510-9])/g;
+  let prev = "";
+  let current = text;
+  while (current !== prev) {
+    prev = current;
+    current = prev.replace(pattern, (match, word) => {
       if (!ORPHAN_WORDS.has(word.toLowerCase())) {
         return match;
       }
-      return `${prefix}${word}${NBSP}`;
-    }
-  );
+      return `${word}${NBSP}`;
+    });
+  }
+  return current;
 }
 
 function serializeLetterSpacing(letterSpacing) {
@@ -325,6 +377,63 @@ function clearNodeSnapshot(node) {
 function countInsertedBreaks(text) {
   const matches = text.match(/-\u200B/g);
   return matches ? matches.length : 0;
+}
+
+// After writing hyphenated text to a node, Figma performs its own line-break
+// layout. Some inserted "-​" markers may end up mid-line because the simulation
+// diverged from Figma's actual renderer (e.g. justified alignment, global
+// line-break optimization). This function removes those spurious markers by
+// cloning the node as a HEIGHT probe (fixed width, auto height) and checking
+// whether removing each marker changes the rendered height. If height is
+// unchanged, the marker wasn't causing a line break and is removed.
+function removeSpuriousHyphens(node) {
+  const text = node.characters;
+  const markerLen = INSERTED_BREAK_MARKER.length;
+
+  const positions = [];
+  let searchFrom = 0;
+  while (true) {
+    const pos = text.indexOf(INSERTED_BREAK_MARKER, searchFrom);
+    if (pos === -1) break;
+    positions.push(pos);
+    searchFrom = pos + 1;
+  }
+
+  if (positions.length === 0) return false;
+
+  const probe = node.clone();
+  probe.visible = false;
+  probe.x = -100000;
+  probe.y = -100000;
+  probe.textAutoResize = "HEIGHT";
+
+  try {
+    probe.characters = text;
+    const baselineHeight = probe.height;
+
+    const toRemove = [];
+
+    for (const pos of positions) {
+      const testText = text.slice(0, pos) + text.slice(pos + markerLen);
+      probe.characters = testText;
+      if (Math.abs(probe.height - baselineHeight) < 0.5) {
+        toRemove.push(pos);
+      }
+    }
+
+    if (toRemove.length === 0) return false;
+
+    let cleanText = text;
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      const p = toRemove[i];
+      cleanText = cleanText.slice(0, p) + cleanText.slice(p + markerLen);
+    }
+
+    node.characters = cleanText;
+    return true;
+  } finally {
+    probe.remove();
+  }
 }
 
 function fitsWithinWidth(text, maxWidth, measureWidth) {
@@ -426,11 +535,28 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
     let insertedBreaks = 0;
     let consecutiveHyphenLines = 0;
 
-    for (const token of tokens) {
+    // Look-back state: when a line ends up with only 2 whole words and the next
+    // token can't be hyphenated into the remaining space, we go back and split
+    // the last whole word — freeing its tail for the next line and reducing the
+    // gap in justified text.
+    let lineWordCount = 0;
+    let lastWordInfo = null; // { token, resultLenBeforeSpaces, spacesBeforeWord, currentLineBefore }
+
+    // Use an index-based loop so look-back can inject tokens at the front.
+    const processingQueue = Array.from(tokens);
+    let qIdx = 0;
+
+    while (qIdx < processingQueue.length) {
+      const token = processingQueue[qIdx++];
+
       if (SPACE_TOKEN_REGEX.test(token)) {
         pendingSpaces += token;
         continue;
       }
+
+      const resultLenBeforeSpaces = result.length;
+      const currentLineBeforeSpaces = currentLine;
+      const spacesForWord = pendingSpaces;
 
       result += pendingSpaces;
       let chunk = token;
@@ -441,6 +567,43 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           result += chunk;
           currentLine = `${linePrefix}${chunk}`;
           chunk = "";
+          lineWordCount++;
+          const prevLastWordInfo = lastWordInfo;
+          lastWordInfo = {
+            token,
+            resultLenBeforeSpaces,
+            spacesBeforeWord: spacesForWord,
+            currentLineBefore: currentLineBeforeSpaces
+          };
+          // Inline orphan prevention: NBSP is inserted only at an actual line
+          // boundary — when the preposition would genuinely dangle. Pre-processing
+          // with preventRussianOrphans inserts NBSP everywhere, reducing stretchable
+          // spaces in justified text even on lines where no break would occur.
+          if (options && options.preventOrphans && currentLineBeforeSpaces.length > 0) {
+            const lastPart = token.split(NBSP).pop();
+            const cyrillicOnly = lastPart.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
+            if (ORPHAN_WORDS.has(cyrillicOnly)) {
+              let pi = qIdx;
+              while (pi < processingQueue.length && SPACE_TOKEN_REGEX.test(processingQueue[pi])) pi++;
+              if (pi < processingQueue.length) {
+                const nextTok = processingQueue[pi];
+                const interSp = processingQueue.slice(qIdx, pi).join("");
+                const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9]/.test(nextTok);
+                if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
+                  // Orphan detected: roll back, merge orphan+nextWord as one NBSP-joined token
+                  result = result.slice(0, resultLenBeforeSpaces);
+                  currentLine = currentLineBeforeSpaces;
+                  lineWordCount = Math.max(0, lineWordCount - 1);
+                  lastWordInfo = prevLastWordInfo;
+                  processingQueue.splice(qIdx, pi - qIdx + 1);
+                  processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
+                  if (spacesForWord.length > 0) {
+                    processingQueue.splice(qIdx, 0, spacesForWord);
+                  }
+                }
+              }
+            }
+          }
           break;
         }
 
@@ -479,6 +642,8 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             chunk = breakPoint.right;
             currentLine = "";
             linePrefix = "";
+            lineWordCount = 0;
+            lastWordInfo = null;
             continue;
           }
 
@@ -486,8 +651,44 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
             totalUnsolvedSparseLines += 1;
           }
 
+          // Look-back: line has 2 whole words (or 3 words on a sparse line) and
+          // no syllable of the current token fits in the remaining space.
+          // Hyphenate the last whole word so its tail spills to the next line,
+          // giving that line more content and reducing the gap in justified text.
+          if ((lineWordCount === 2 || (lineWordCount === 3 && isLineSparse)) && lastWordInfo !== null && !reachedConsecutiveLimit) {
+            const lw = lastWordInfo;
+            const remainingForLw =
+              maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
+            const lbBreak = findBestBreakInToken(
+              lw.token, remainingForLw, measureWidth, options
+            );
+            if (lbBreak) {
+              result = result.slice(0, lw.resultLenBeforeSpaces);
+              result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
+              insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
+              // Re-inject: tail of split word, the original space before the
+              // current token, then the current token. Without the space the
+              // tail and the current token would be concatenated (e.g.
+              // "возкиявляются" instead of "возки являются").
+              if (spacesForWord.length > 0) {
+                processingQueue.splice(qIdx, 0, lbBreak.right, spacesForWord, token);
+              } else {
+                processingQueue.splice(qIdx, 0, lbBreak.right, token);
+              }
+              currentLine = "";
+              linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
+              chunk = "";
+              break;
+            }
+          }
+
           consecutiveHyphenLines = 0;
           linePrefix = "";
+          lineWordCount = 0;
+          lastWordInfo = null;
           continue;
         }
 
@@ -495,6 +696,13 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           result += chunk;
           currentLine = chunk;
           chunk = "";
+          lineWordCount++;
+          lastWordInfo = {
+            token,
+            resultLenBeforeSpaces,
+            spacesBeforeWord: spacesForWord,
+            currentLineBefore: currentLineBeforeSpaces
+          };
           break;
         }
 
@@ -509,6 +717,8 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           chunk = breakPoint.right;
           currentLine = "";
           linePrefix = "";
+          lineWordCount = 0;
+          lastWordInfo = null;
           continue;
         }
 
@@ -516,6 +726,13 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
         result += chunk;
         currentLine = chunk;
         chunk = "";
+        lineWordCount++;
+        lastWordInfo = {
+          token,
+          resultLenBeforeSpaces,
+          spacesBeforeWord: spacesForWord,
+          currentLineBefore: currentLineBeforeSpaces
+        };
       }
 
       pendingSpaces = "";
@@ -975,19 +1192,22 @@ async function processTextNodes(textNodes, mode, settings) {
         transformed = resetHyphenationText(original);
       } else {
         const mixedTypography = hasMixedTypography(node);
+        // Per-node settings: auto-tighten hyphenation and letter-spacing range
+        // for narrow columns based on block width and font size.
+        const nodeSettings = deriveSettingsForNode(node, settings);
 
-        let preparedText = settings.preventOrphans
-          ? preventRussianOrphans(cleanOriginal)
+        // Orphan prevention (preventOrphans) is handled inline inside
+        // hyphenateRussianTextWithVisibleDash via options.preventOrphans —
+        // NBSP is only inserted at actual line boundaries, not everywhere,
+        // so justified text keeps the maximum number of stretchable spaces.
+        let preparedText = settings.autoNbsp
+          ? applyNonBreakingSpaces(cleanOriginal)
           : cleanOriginal;
-
-        if (settings.autoNbsp) {
-          preparedText = applyNonBreakingSpaces(preparedText);
-        }
 
         if (settings.optimizeLetterSpacing && !mixedTypography) {
           const currentSpacing = getNodeLetterSpacing(node);
           const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);
-          const candidates = getLetterSpacingCandidates(node, settings);
+          const candidates = getLetterSpacingCandidates(node, nodeSettings);
 
           let bestText = preparedText;
           let bestSpacing = originalLetterSpacing;
@@ -1004,12 +1224,12 @@ async function processTextNodes(textNodes, mode, settings) {
                 preparedText,
                 node.width,
                 measurer.measure,
-                settings
+                nodeSettings
               );
               const breakCount = hyphenResult.breakCount;
               const sparseCount = hyphenResult.unsolvedSparseLines;
               const desiredPenalty = Math.abs(
-                candidate.percentValue - settings.letterSpacingDesiredPercent
+                candidate.percentValue - nodeSettings.letterSpacingDesiredPercent
               );
               const currentPenalty = Math.abs(
                 candidate.percentValue - currentSpacingPercent
@@ -1052,7 +1272,7 @@ async function processTextNodes(textNodes, mode, settings) {
               preparedText,
               node.width,
               measurer.measure,
-              settings
+              nodeSettings
             ).text;
           } finally {
             measurer.destroy();
@@ -1062,6 +1282,7 @@ async function processTextNodes(textNodes, mode, settings) {
 
       if (transformed !== original) {
         node.characters = transformed;
+        removeSpuriousHyphens(node);
         hasNodeChanges = true;
       }
 
