@@ -65,7 +65,6 @@ const DEFAULT_SETTINGS = {
   autoWatch: true,
   preventOrphans: true,
   autoNbsp: true,
-  hangingHyphen: true,
   optimizeLetterSpacing: true,
   minWordLengthForHyphenation: 5,
   minLettersBeforeHyphen: 2,
@@ -111,8 +110,6 @@ function normalizeSettings(input) {
     typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
   const autoNbsp =
     typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
-  const hangingHyphen =
-    typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
   const optimizeLetterSpacing =
     typeof src.optimizeLetterSpacing === "boolean"
       ? src.optimizeLetterSpacing
@@ -159,7 +156,6 @@ function normalizeSettings(input) {
     autoWatch,
     preventOrphans,
     autoNbsp,
-    hangingHyphen,
     optimizeLetterSpacing,
     minWordLengthForHyphenation,
     minLettersBeforeHyphen,
@@ -441,7 +437,6 @@ function fitsWithinWidth(text, maxWidth, measureWidth) {
 }
 
 function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
-  const useHangingHyphen = Boolean(options && options.hangingHyphen);
   const minWordLength =
     options && typeof options.minWordLengthForHyphenation === "number"
       ? options.minWordLengthForHyphenation
@@ -482,18 +477,8 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
     }
 
     const leftWithDash = `${leading}${leftCore}-`;
-    const leftWithoutDash = `${leading}${leftCore}`;
-    const widthWithoutDash = measureWidth(leftWithoutDash);
-    const widthWithDash = measureWidth(leftWithDash);
-    const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
 
-    const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
-    const fitsWithHangingHyphen =
-      useHangingHyphen &&
-      widthWithoutDash <= remainingWidth + WIDTH_EPSILON &&
-      widthWithDash <= remainingWidth + dashWidth + 0.5;
-
-    if (fitsNormally || fitsWithHangingHyphen) {
+    if (measureWidth(leftWithDash) <= remainingWidth + WIDTH_EPSILON) {
       return {
         left: `${leading}${leftCore}`,
         right: `${rightCore}${trailing}`

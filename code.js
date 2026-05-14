@@ -228,7 +228,6 @@
     autoWatch: true,
     preventOrphans: true,
     autoNbsp: true,
-    hangingHyphen: true,
     optimizeLetterSpacing: true,
     minWordLengthForHyphenation: 5,
     minLettersBeforeHyphen: 2,
@@ -266,7 +265,6 @@
     const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
     const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
     const autoNbsp = typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
-    const hangingHyphen = typeof src.hangingHyphen === "boolean" ? src.hangingHyphen : DEFAULT_SETTINGS.hangingHyphen;
     const optimizeLetterSpacing = typeof src.optimizeLetterSpacing === "boolean" ? src.optimizeLetterSpacing : DEFAULT_SETTINGS.optimizeLetterSpacing;
     const minWordLengthForHyphenation = clampNumber(
       Number((_a = src.minWordLengthForHyphenation) != null ? _a : DEFAULT_SETTINGS.minWordLengthForHyphenation),
@@ -315,7 +313,6 @@
       autoWatch,
       preventOrphans,
       autoNbsp,
-      hangingHyphen,
       optimizeLetterSpacing,
       minWordLengthForHyphenation,
       minLettersBeforeHyphen,
@@ -495,7 +492,6 @@
     return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
   }
   function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
-    const useHangingHyphen = Boolean(options && options.hangingHyphen);
     const minWordLength = options && typeof options.minWordLengthForHyphenation === "number" ? options.minWordLengthForHyphenation : 4;
     const minBefore = options && typeof options.minLettersBeforeHyphen === "number" ? options.minLettersBeforeHyphen : 2;
     const minAfter = options && typeof options.minLettersAfterHyphen === "number" ? options.minLettersAfterHyphen : 3;
@@ -520,13 +516,7 @@
         continue;
       }
       const leftWithDash = `${leading}${leftCore}-`;
-      const leftWithoutDash = `${leading}${leftCore}`;
-      const widthWithoutDash = measureWidth(leftWithoutDash);
-      const widthWithDash = measureWidth(leftWithDash);
-      const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
-      const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
-      const fitsWithHangingHyphen = useHangingHyphen && widthWithoutDash <= remainingWidth + WIDTH_EPSILON && widthWithDash <= remainingWidth + dashWidth + 0.5;
-      if (fitsNormally || fitsWithHangingHyphen) {
+      if (measureWidth(leftWithDash) <= remainingWidth + WIDTH_EPSILON) {
         return {
           left: `${leading}${leftCore}`,
           right: `${rightCore}${trailing}`

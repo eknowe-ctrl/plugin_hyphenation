@@ -494,14 +494,6 @@
 
         <div class="toggle-item">
           <div class="toggle-row">
-            <span class="row-label">Висячий дефис</span>
-            <label class="switch"><input type="checkbox" id="hangingHyphen" /><div class="knob"></div></label>
-          </div>
-          <div class="divider"></div>
-        </div>
-
-        <div class="toggle-item">
-          <div class="toggle-row">
             <span class="row-label">Оптимизировать трекинг</span>
             <label class="switch"><input type="checkbox" id="optimizeLetterSpacing" /><div class="knob"></div></label>
           </div>
@@ -586,7 +578,6 @@
     autoWatch:             document.getElementById('autoWatch'),
     preventOrphans:        document.getElementById('preventOrphans'),
     autoNbsp:              document.getElementById('autoNbsp'),
-    hangingHyphen:         document.getElementById('hangingHyphen'),
     optimizeLetterSpacing: document.getElementById('optimizeLetterSpacing')
   };
   var numFields = {
@@ -619,7 +610,6 @@
       autoWatch:             toggleFields.autoWatch.checked,
       preventOrphans:        toggleFields.preventOrphans.checked,
       autoNbsp:              toggleFields.autoNbsp.checked,
-      hangingHyphen:         toggleFields.hangingHyphen.checked,
       optimizeLetterSpacing: toggleFields.optimizeLetterSpacing.checked,
       minWordLengthForHyphenation: Number(numFields.minWordLengthForHyphenation.value) || 5,
       minLettersBeforeHyphen:      Number(numFields.minLettersBeforeHyphen.value)      || 2,
