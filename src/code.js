@@ -437,6 +437,8 @@ function fitsWithinWidth(text, maxWidth, measureWidth) {
 }
 
 function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
+  const forbidden = options && options.forbiddenBreaks instanceof Set
+    ? options.forbiddenBreaks : null;
   const minWordLength =
     options && typeof options.minWordLengthForHyphenation === "number"
       ? options.minWordLengthForHyphenation
@@ -476,6 +478,10 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
       continue;
     }
 
+    if (forbidden && forbidden.has(`${core}:${leftCore}`)) {
+      continue;
+    }
+
     const leftWithDash = `${leading}${leftCore}-`;
 
     if (measureWidth(leftWithDash) <= remainingWidth + WIDTH_EPSILON) {
@@ -489,212 +495,197 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
   return null;
 }
 
-function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
-  const normalized = normalizeTextForRehyphenation(text);
-  const paragraphs = normalized.split("\n");
-  const maxHyphensPerParagraph =
-    options && typeof options.maxHyphensPerParagraph === "number"
-      ? options.maxHyphensPerParagraph
-      : 0;
+// Simulate line breaks for a single hyphenated paragraph (no \n inside).
+// Mandatory breaks come from INSERTED_BREAK_MARKERs (token contains ​).
+// Between those, words wrap greedily by measureWidth.
+// Returns array of line strings ready for measureWidth calls.
+function simulateParagraphLines(paraText, maxWidth, measureWidth) {
+  const tokens = paraText.match(TOKEN_REGEX) || [];
+  const lines = [];
+  let currentLine = "";
+  let pendingSpaces = "";
 
-  const maxConsecutiveHyphens =
-    options && typeof options.maxConsecutiveHyphens === "number"
-      ? options.maxConsecutiveHyphens
-      : 0;
-
-  let totalBreakCount = 0;
-  let totalUnsolvedSparseLines = 0;
-  const transformedParagraphs = [];
-
-  for (const line of paragraphs) {
-    const tokens = line.match(TOKEN_REGEX);
-
-    if (!tokens) {
-      transformedParagraphs.push(line);
+  for (const token of tokens) {
+    if (SPACE_TOKEN_REGEX.test(token)) {
+      pendingSpaces += token;
       continue;
     }
 
-    let result = "";
-    let currentLine = "";
-    let pendingSpaces = "";
-    let insertedBreaks = 0;
-    let consecutiveHyphenLines = 0;
+    if (token.includes(ZERO_WIDTH_SPACE)) {
+      const cleanTok = token.replace(/​/g, "");
+      currentLine += pendingSpaces + cleanTok;
+      lines.push(currentLine);
+      currentLine = "";
+      pendingSpaces = "";
+      continue;
+    }
 
-    // Look-back state: when a line ends up with only 2 whole words and the next
-    // token can't be hyphenated into the remaining space, we go back and split
-    // the last whole word — freeing its tail for the next line and reducing the
-    // gap in justified text.
-    let lineWordCount = 0;
-    let lastWordInfo = null; // { token, resultLenBeforeSpaces, spacesBeforeWord, currentLineBefore }
+    const candidate = currentLine
+      ? currentLine + pendingSpaces + token
+      : token;
+    if (!currentLine || fitsWithinWidth(candidate, maxWidth, measureWidth)) {
+      currentLine = candidate;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = token;
+    }
+    pendingSpaces = "";
+  }
 
-    // Use an index-based loop so look-back can inject tokens at the front.
-    const processingQueue = Array.from(tokens);
-    let qIdx = 0;
+  if (currentLine.trim()) lines.push(currentLine);
+  return lines;
+}
 
-    while (qIdx < processingQueue.length) {
-      const token = processingQueue[qIdx++];
+// Badness = sum of squared fill deficits for non-last lines with fill < threshold.
+// The last line is excluded because Figma typically left-aligns it.
+function computeParagraphBadness(lines, maxWidth, measureWidth) {
+  if (lines.length <= 1) return 0;
+  let badness = 0;
+  for (let i = 0; i < lines.length - 1; i++) {
+    const fill = maxWidth > 0 ? measureWidth(lines[i]) / maxWidth : 1;
+    const deficit = Math.max(0, SPARSE_LINE_FILL_THRESHOLD - fill);
+    badness += deficit * deficit;
+  }
+  return badness;
+}
 
-      if (SPACE_TOKEN_REGEX.test(token)) {
-        pendingSpaces += token;
-        continue;
-      }
+// Find hyphens in a first-pass result that have a short right part (≤ threshold).
+// Short tails are the main cause of sparse next lines: "обеспече- | ние" leaves
+// "ние" as a 3-char stub that contributes little to the next line's fill.
+const SECOND_PASS_TAIL_MAX = 4;
 
-      const resultLenBeforeSpaces = result.length;
-      const currentLineBeforeSpaces = currentLine;
-      const spacesForWord = pendingSpaces;
+function extractShortTailCandidates(resultText) {
+  const tokens = resultText.match(TOKEN_REGEX) || [];
+  const candidates = [];
 
-      result += pendingSpaces;
-      let chunk = token;
-      let linePrefix = `${currentLine}${pendingSpaces}`;
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (!tok.includes(ZERO_WIDTH_SPACE)) continue;
 
-      while (chunk.length > 0) {
-        if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
-          result += chunk;
-          currentLine = `${linePrefix}${chunk}`;
-          chunk = "";
-          lineWordCount++;
-          const prevLastWordInfo = lastWordInfo;
-          lastWordInfo = {
-            token,
-            resultLenBeforeSpaces,
-            spacesBeforeWord: spacesForWord,
-            currentLineBefore: currentLineBeforeSpaces
-          };
-          // Inline orphan prevention: NBSP is inserted only at an actual line
-          // boundary — when the preposition would genuinely dangle. Pre-processing
-          // with preventRussianOrphans inserts NBSP everywhere, reducing stretchable
-          // spaces in justified text even on lines where no break would occur.
-          if (options && options.preventOrphans && currentLineBeforeSpaces.length > 0) {
-            const lastPart = token.split(NBSP).pop();
-            const cyrillicOnly = lastPart.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
-            if (ORPHAN_WORDS.has(cyrillicOnly)) {
-              let pi = qIdx;
-              while (pi < processingQueue.length && SPACE_TOKEN_REGEX.test(processingQueue[pi])) pi++;
-              if (pi < processingQueue.length) {
-                const nextTok = processingQueue[pi];
-                const interSp = processingQueue.slice(qIdx, pi).join("");
-                const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9]/.test(nextTok);
-                if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
-                  // Orphan detected: roll back, merge orphan+nextWord as one NBSP-joined token
-                  result = result.slice(0, resultLenBeforeSpaces);
-                  currentLine = currentLineBeforeSpaces;
-                  lineWordCount = Math.max(0, lineWordCount - 1);
-                  lastWordInfo = prevLastWordInfo;
-                  processingQueue.splice(qIdx, pi - qIdx + 1);
-                  processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
-                  if (spacesForWord.length > 0) {
-                    processingQueue.splice(qIdx, 0, spacesForWord);
-                  }
+    // tok = "leadingChars leftCore -​"
+    const leftFull = tok.replace(/-​$/, "");
+    const leftMatch = leftFull.match(RUSSIAN_TOKEN_REGEX);
+    if (!leftMatch) continue;
+    const leftCore = leftMatch[2];
+
+    // Peek at the next non-space token to get the right part
+    let j = i + 1;
+    while (j < tokens.length && SPACE_TOKEN_REGEX.test(tokens[j])) j++;
+    if (j >= tokens.length) continue;
+
+    const rightClean = tokens[j].replace(/-​[\s\S]*$/, "");
+    const rightMatch = rightClean.match(RUSSIAN_TOKEN_REGEX);
+    if (!rightMatch) continue;
+    const rightCore = rightMatch[2];
+
+    if (rightCore.length <= SECOND_PASS_TAIL_MAX) {
+      candidates.push({ core: leftCore + rightCore, leftCore });
+    }
+  }
+
+  return candidates;
+}
+
+// Core greedy hyphenation pass for a single paragraph (no \n).
+// Returns { text, breakCount, unsolvedSparseLines }.
+function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphensPara, maxConsecHyphens) {
+  const tokens = lineText.match(TOKEN_REGEX);
+  if (!tokens) return { text: lineText, breakCount: 0, unsolvedSparseLines: 0 };
+
+  let result = "";
+  let currentLine = "";
+  let pendingSpaces = "";
+  let insertedBreaks = 0;
+  let consecutiveHyphenLines = 0;
+  let lineWordCount = 0;
+  let lastWordInfo = null;
+  let unsolvedSparseLines = 0;
+
+  const processingQueue = Array.from(tokens);
+  let qIdx = 0;
+
+  while (qIdx < processingQueue.length) {
+    const token = processingQueue[qIdx++];
+
+    if (SPACE_TOKEN_REGEX.test(token)) {
+      pendingSpaces += token;
+      continue;
+    }
+
+    const resultLenBeforeSpaces = result.length;
+    const currentLineBeforeSpaces = currentLine;
+    const spacesForWord = pendingSpaces;
+
+    result += pendingSpaces;
+    let chunk = token;
+    let linePrefix = `${currentLine}${pendingSpaces}`;
+
+    while (chunk.length > 0) {
+      if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
+        result += chunk;
+        currentLine = `${linePrefix}${chunk}`;
+        chunk = "";
+        lineWordCount++;
+        const prevLastWordInfo = lastWordInfo;
+        lastWordInfo = {
+          token,
+          resultLenBeforeSpaces,
+          spacesBeforeWord: spacesForWord,
+          currentLineBefore: currentLineBeforeSpaces
+        };
+        if (options && options.preventOrphans && currentLineBeforeSpaces.length > 0) {
+          const lastPart = token.split(NBSP).pop();
+          const cyrillicOnly = lastPart.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
+          if (ORPHAN_WORDS.has(cyrillicOnly)) {
+            let pi = qIdx;
+            while (pi < processingQueue.length && SPACE_TOKEN_REGEX.test(processingQueue[pi])) pi++;
+            if (pi < processingQueue.length) {
+              const nextTok = processingQueue[pi];
+              const interSp = processingQueue.slice(qIdx, pi).join("");
+              const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9]/.test(nextTok);
+              if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
+                result = result.slice(0, resultLenBeforeSpaces);
+                currentLine = currentLineBeforeSpaces;
+                lineWordCount = Math.max(0, lineWordCount - 1);
+                lastWordInfo = prevLastWordInfo;
+                processingQueue.splice(qIdx, pi - qIdx + 1);
+                processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
+                if (spacesForWord.length > 0) {
+                  processingQueue.splice(qIdx, 0, spacesForWord);
                 }
               }
             }
           }
-          break;
+        }
+        break;
+      }
+
+      const reachedParagraphLimit =
+        maxHyphensPara > 0 && insertedBreaks >= maxHyphensPara;
+      const reachedConsecutiveLimit =
+        maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
+      const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+
+      if (linePrefix.length > 0) {
+        const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
+        const isLineSparse =
+          lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+
+        const canBreak = (!reachedParagraphLimit || isLineSparse) && !reachedConsecutiveLimit;
+
+        let breakPoint = null;
+        if (canBreak) {
+          breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
         }
 
-        const reachedParagraphLimit =
-          maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
-        const reachedConsecutiveLimit =
-          maxConsecutiveHyphens > 0 && consecutiveHyphenLines >= maxConsecutiveHyphens;
-        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
-
-        if (linePrefix.length > 0) {
-          const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
-          const isLineSparse =
-            lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
-
-          const canBreak = (!reachedParagraphLimit || isLineSparse) && !reachedConsecutiveLimit;
-
-          let breakPoint = null;
-          if (canBreak) {
-            breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
-          }
-
-          // Sparse-line fallback: relax Before/After limits to 1 letter each.
-          // This finds hyphenation points that stricter settings would skip.
-          if (!breakPoint && isLineSparse && !reachedConsecutiveLimit) {
-            breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
-              ...options,
-              minLettersBeforeHyphen: 1,
-              minLettersAfterHyphen: 1
-            });
-          }
-
-          if (breakPoint) {
-            result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
-            insertedBreaks += 1;
-            consecutiveHyphenLines += 1;
-            chunk = breakPoint.right;
-            currentLine = "";
-            linePrefix = "";
-            lineWordCount = 0;
-            lastWordInfo = null;
-            continue;
-          }
-
-          if (isLineSparse) {
-            totalUnsolvedSparseLines += 1;
-          }
-
-          // Look-back: line has 2 whole words (or 3 words on a sparse line) and
-          // no syllable of the current token fits in the remaining space.
-          // Hyphenate the last whole word so its tail spills to the next line,
-          // giving that line more content and reducing the gap in justified text.
-          if ((lineWordCount === 2 || (lineWordCount === 3 && isLineSparse)) && lastWordInfo !== null && !reachedConsecutiveLimit) {
-            const lw = lastWordInfo;
-            const remainingForLw =
-              maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
-            const lbBreak = findBestBreakInToken(
-              lw.token, remainingForLw, measureWidth, options
-            );
-            if (lbBreak) {
-              result = result.slice(0, lw.resultLenBeforeSpaces);
-              result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
-              insertedBreaks += 1;
-              consecutiveHyphenLines += 1;
-              // Re-inject: tail of split word, the original space before the
-              // current token, then the current token. Without the space the
-              // tail and the current token would be concatenated (e.g.
-              // "возкиявляются" instead of "возки являются").
-              if (spacesForWord.length > 0) {
-                processingQueue.splice(qIdx, 0, lbBreak.right, spacesForWord, token);
-              } else {
-                processingQueue.splice(qIdx, 0, lbBreak.right, token);
-              }
-              currentLine = "";
-              linePrefix = "";
-              lineWordCount = 0;
-              lastWordInfo = null;
-              chunk = "";
-              break;
-            }
-          }
-
-          consecutiveHyphenLines = 0;
-          linePrefix = "";
-          lineWordCount = 0;
-          lastWordInfo = null;
-          continue;
+        if (!breakPoint && isLineSparse && !reachedConsecutiveLimit) {
+          breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
+            ...options,
+            minLettersBeforeHyphen: 1,
+            minLettersAfterHyphen: 1
+          });
         }
 
-        if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
-          result += chunk;
-          currentLine = chunk;
-          chunk = "";
-          lineWordCount++;
-          lastWordInfo = {
-            token,
-            resultLenBeforeSpaces,
-            spacesBeforeWord: spacesForWord,
-            currentLineBefore: currentLineBeforeSpaces
-          };
-          break;
-        }
-
-        const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
-        const breakPoint = canBreakLong
-          ? findBestBreakInToken(chunk, maxWidth, measureWidth, options)
-          : null;
         if (breakPoint) {
           result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
           insertedBreaks += 1;
@@ -707,7 +698,46 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           continue;
         }
 
+        if (isLineSparse) {
+          unsolvedSparseLines += 1;
+        }
+
+        // Look-back: line has 2 whole words (or 3 words on a sparse line) and
+        // no syllable of the current token fits in the remaining space.
+        if ((lineWordCount === 2 || (lineWordCount === 3 && isLineSparse)) && lastWordInfo !== null && !reachedConsecutiveLimit) {
+          const lw = lastWordInfo;
+          const remainingForLw =
+            maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
+          const lbBreak = findBestBreakInToken(
+            lw.token, remainingForLw, measureWidth, options
+          );
+          if (lbBreak) {
+            result = result.slice(0, lw.resultLenBeforeSpaces);
+            result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
+            insertedBreaks += 1;
+            consecutiveHyphenLines += 1;
+            if (spacesForWord.length > 0) {
+              processingQueue.splice(qIdx, 0, lbBreak.right, spacesForWord, token);
+            } else {
+              processingQueue.splice(qIdx, 0, lbBreak.right, token);
+            }
+            currentLine = "";
+            linePrefix = "";
+            lineWordCount = 0;
+            lastWordInfo = null;
+            chunk = "";
+            break;
+          }
+        }
+
         consecutiveHyphenLines = 0;
+        linePrefix = "";
+        lineWordCount = 0;
+        lastWordInfo = null;
+        continue;
+      }
+
+      if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
         result += chunk;
         currentLine = chunk;
         chunk = "";
@@ -718,14 +748,106 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
           spacesBeforeWord: spacesForWord,
           currentLineBefore: currentLineBeforeSpaces
         };
+        break;
       }
 
-      pendingSpaces = "";
+      const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
+      const breakPoint = canBreakLong
+        ? findBestBreakInToken(chunk, maxWidth, measureWidth, options)
+        : null;
+      if (breakPoint) {
+        result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
+        insertedBreaks += 1;
+        consecutiveHyphenLines += 1;
+        chunk = breakPoint.right;
+        currentLine = "";
+        linePrefix = "";
+        lineWordCount = 0;
+        lastWordInfo = null;
+        continue;
+      }
+
+      consecutiveHyphenLines = 0;
+      result += chunk;
+      currentLine = chunk;
+      chunk = "";
+      lineWordCount++;
+      lastWordInfo = {
+        token,
+        resultLenBeforeSpaces,
+        spacesBeforeWord: spacesForWord,
+        currentLineBefore: currentLineBeforeSpaces
+      };
     }
 
-    result += pendingSpaces;
-    totalBreakCount += insertedBreaks;
-    transformedParagraphs.push(result);
+    pendingSpaces = "";
+  }
+
+  result += pendingSpaces;
+  return { text: result, breakCount: insertedBreaks, unsolvedSparseLines };
+}
+
+function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
+  const normalized = normalizeTextForRehyphenation(text);
+  const paragraphs = normalized.split("\n");
+  const maxHyphensPara =
+    options && typeof options.maxHyphensPerParagraph === "number"
+      ? options.maxHyphensPerParagraph
+      : 0;
+  const maxConsecHyphens =
+    options && typeof options.maxConsecutiveHyphens === "number"
+      ? options.maxConsecutiveHyphens
+      : 0;
+
+  let totalBreakCount = 0;
+  let totalUnsolvedSparseLines = 0;
+  const transformedParagraphs = [];
+
+  for (const line of paragraphs) {
+    if (!line.match(TOKEN_REGEX)) {
+      transformedParagraphs.push(line);
+      continue;
+    }
+
+    // First pass: greedy line-by-line hyphenation
+    let paraResult = processOneParagraph(
+      line, maxWidth, measureWidth, options, maxHyphensPara, maxConsecHyphens
+    );
+
+    // Second pass: for each hyphen with a short tail (≤ SECOND_PASS_TAIL_MAX chars),
+    // try forbidding that specific break and re-running. If the resulting paragraph
+    // has lower total badness (fewer / smaller gaps in justified lines), keep it.
+    // This fixes patterns like "обеспече- | ние нашей деятельности…" where a short
+    // tail leaves the next line very sparse.
+    const shortTailBreaks = extractShortTailCandidates(paraResult.text);
+    if (shortTailBreaks.length > 0) {
+      const firstLines = simulateParagraphLines(paraResult.text, maxWidth, measureWidth);
+      let bestBadness = computeParagraphBadness(firstLines, maxWidth, measureWidth);
+      let bestText = paraResult.text;
+
+      for (const { core, leftCore } of shortTailBreaks.slice(0, 5)) {
+        const altResult = processOneParagraph(
+          line, maxWidth, measureWidth,
+          { ...options, forbiddenBreaks: new Set([`${core}:${leftCore}`]) },
+          maxHyphensPara, maxConsecHyphens
+        );
+        const altLines = simulateParagraphLines(altResult.text, maxWidth, measureWidth);
+        const altBadness = computeParagraphBadness(altLines, maxWidth, measureWidth);
+
+        if (altBadness < bestBadness - 1e-6) {
+          bestBadness = altBadness;
+          bestText = altResult.text;
+        }
+      }
+
+      if (bestText !== paraResult.text) {
+        paraResult = { ...paraResult, text: bestText };
+      }
+    }
+
+    totalBreakCount += paraResult.breakCount;
+    totalUnsolvedSparseLines += paraResult.unsolvedSparseLines;
+    transformedParagraphs.push(paraResult.text);
   }
 
   return {
