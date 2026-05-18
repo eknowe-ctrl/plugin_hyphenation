@@ -2430,6 +2430,13 @@ async function run() {
       return;
     }
 
+    if (message.type === "open-external") {
+      if (typeof message.url === "string" && message.url.length > 0) {
+        figma.openExternal(message.url);
+      }
+      return;
+    }
+
     if (message.type === APPLY_MODE || message.type === RESET_MODE) {
       await handleAction(message.type);
     }
