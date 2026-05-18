@@ -1045,6 +1045,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
   let lastWordInfo = null;
   let secondToLastWordInfo = null;
   let thirdToLastWordInfo = null;
+  let fourthToLastWordInfo = null;
+  let fifthToLastWordInfo = null;
   let prevLineLastWordInfo = null;
   let prevLineSecondToLastWordInfo = null;
   let prevLineWasNatural = false;
@@ -1111,6 +1113,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
                       lastWordInfo = null;
                       secondToLastWordInfo = null;
                       thirdToLastWordInfo = null;
+                      fourthToLastWordInfo = null;
+                      fifthToLastWordInfo = null;
                       pendingSpaces = "";
                       chunk = "";
                       break;
@@ -1130,6 +1134,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
         currentLine = `${linePrefix}${chunk}`;
         chunk = "";
         lineWordCount++;
+        fifthToLastWordInfo = fourthToLastWordInfo;
+        fourthToLastWordInfo = thirdToLastWordInfo;
         thirdToLastWordInfo = secondToLastWordInfo;
         secondToLastWordInfo = lastWordInfo;
         const prevLastWordInfo = lastWordInfo;
@@ -1155,9 +1161,11 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
                 lineWordCount = Math.max(0, lineWordCount - 1);
                 lastWordInfo = prevLastWordInfo;
                 // The shift that happened when the rolled-back word was placed:
-                // third→second→last. Reverse it: second = what was third before.
+                // fifth→fourth→third→second→last. Reverse it one step.
                 secondToLastWordInfo = thirdToLastWordInfo;
-                thirdToLastWordInfo = null;
+                thirdToLastWordInfo = fourthToLastWordInfo;
+                fourthToLastWordInfo = fifthToLastWordInfo;
+                fifthToLastWordInfo = null;
                 processingQueue.splice(qIdx, pi - qIdx + 1);
                 processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
                 if (spacesForWord.length > 0) {
@@ -1188,7 +1196,6 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
           lineFillRatio < SPARSE_LINE_FILL_THRESHOLD ||
           extraGapFraction > SPARSE_GAP_FRACTION
         );
-
         // Sparse lines override the consecutive-hyphen limit.
         const canBreak = (!reachedParagraphLimit || isLineSparse) &&
           (!reachedConsecutiveLimit || isLineSparse);
@@ -1217,16 +1224,18 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
           lastWordInfo = null;
           secondToLastWordInfo = null;
           thirdToLastWordInfo = null;
+          fourthToLastWordInfo = null;
+          fifthToLastWordInfo = null;
           prevLineLastWordInfo = null;
           prevLineSecondToLastWordInfo = null;
           prevLineWasNatural = false;
           continue;
         }
 
-        // Look-back: line has 2–5 whole words and no syllable of the current token
-        // fits in the remaining space. Cascade: last → second-to-last → third-to-last.
+        // Look-back: line has 2–7 whole words and no syllable of the current token
+        // fits in the remaining space. Cascade: last → second → third → fourth → fifth.
         const lbWordCount = lineWordCount === 2 ||
-          (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse);
+          (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse);
         if (lbWordCount && lastWordInfo !== null && (!reachedConsecutiveLimit || isLineSparse)) {
           const lw = lastWordInfo;
           const remainingForLw =
@@ -1249,6 +1258,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
             lastWordInfo = null;
             secondToLastWordInfo = null;
             thirdToLastWordInfo = null;
+            fourthToLastWordInfo = null;
+            fifthToLastWordInfo = null;
             prevLineLastWordInfo = null;
             prevLineSecondToLastWordInfo = null;
             prevLineWasNatural = false;
@@ -1257,7 +1268,7 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
           }
 
           // Last word can't be broken — try second-to-last.
-          if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse &&
+          if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse &&
               secondToLastWordInfo !== null) {
             const slw = secondToLastWordInfo;
             const remainingForSlw =
@@ -1284,6 +1295,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
               lastWordInfo = null;
               secondToLastWordInfo = null;
               thirdToLastWordInfo = null;
+              fourthToLastWordInfo = null;
+              fifthToLastWordInfo = null;
               prevLineLastWordInfo = null;
               prevLineSecondToLastWordInfo = null;
               prevLineWasNatural = false;
@@ -1293,7 +1306,7 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
           }
 
           // Second-to-last also can't be broken — try third-to-last.
-          if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse && thirdToLastWordInfo !== null) {
+          if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse && thirdToLastWordInfo !== null) {
             const tlw = thirdToLastWordInfo;
             const slw = secondToLastWordInfo;
             const remainingForTlw =
@@ -1322,6 +1335,97 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
               lastWordInfo = null;
               secondToLastWordInfo = null;
               thirdToLastWordInfo = null;
+              fourthToLastWordInfo = null;
+              fifthToLastWordInfo = null;
+              prevLineLastWordInfo = null;
+              prevLineSecondToLastWordInfo = null;
+              prevLineWasNatural = false;
+              chunk = "";
+              break;
+            }
+          }
+
+          // Third-to-last also can't be broken — try fourth-to-last.
+          if (lineWordCount >= 4 && lineWordCount <= 7 && isLineSparse && fourthToLastWordInfo !== null) {
+            const flw = fourthToLastWordInfo;
+            const tlw = thirdToLastWordInfo;
+            const slw = secondToLastWordInfo;
+            const remainingForFlw =
+              maxWidth - measureWidth(flw.currentLineBefore + flw.spacesBeforeWord);
+            const flwBreak = findBestBreakInToken(
+              flw.token, remainingForFlw, measureWidth, options
+            );
+            if (flwBreak) {
+              result = result.slice(0, flw.resultLenBeforeSpaces);
+              result += flw.spacesBeforeWord + flwBreak.left + INSERTED_BREAK_MARKER;
+              insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
+              const rawPushBack4 = [
+                flwBreak.right,
+                ...(tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : []),
+                ...(tlw ? [tlw.token] : []),
+                ...(slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : []),
+                ...(slw ? [slw.token] : []),
+                ...(lw.spacesBeforeWord ? [lw.spacesBeforeWord] : []),
+                lw.token,
+                ...(spacesForWord.length > 0 ? [spacesForWord] : []),
+                token,
+              ];
+              processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack4));
+              currentLine = "";
+              linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
+              secondToLastWordInfo = null;
+              thirdToLastWordInfo = null;
+              fourthToLastWordInfo = null;
+              fifthToLastWordInfo = null;
+              prevLineLastWordInfo = null;
+              prevLineSecondToLastWordInfo = null;
+              prevLineWasNatural = false;
+              chunk = "";
+              break;
+            }
+          }
+
+          // Fourth-to-last also can't be broken — try fifth-to-last.
+          if (lineWordCount >= 5 && lineWordCount <= 7 && isLineSparse && fifthToLastWordInfo !== null) {
+            const xw = fifthToLastWordInfo;
+            const flw = fourthToLastWordInfo;
+            const tlw = thirdToLastWordInfo;
+            const slw = secondToLastWordInfo;
+            const remainingForXw =
+              maxWidth - measureWidth(xw.currentLineBefore + xw.spacesBeforeWord);
+            const xwBreak = findBestBreakInToken(
+              xw.token, remainingForXw, measureWidth, options
+            );
+            if (xwBreak) {
+              result = result.slice(0, xw.resultLenBeforeSpaces);
+              result += xw.spacesBeforeWord + xwBreak.left + INSERTED_BREAK_MARKER;
+              insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
+              const rawPushBack5 = [
+                xwBreak.right,
+                ...(flw && flw.spacesBeforeWord ? [flw.spacesBeforeWord] : []),
+                ...(flw ? [flw.token] : []),
+                ...(tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : []),
+                ...(tlw ? [tlw.token] : []),
+                ...(slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : []),
+                ...(slw ? [slw.token] : []),
+                ...(lw.spacesBeforeWord ? [lw.spacesBeforeWord] : []),
+                lw.token,
+                ...(spacesForWord.length > 0 ? [spacesForWord] : []),
+                token,
+              ];
+              processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack5));
+              currentLine = "";
+              linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
+              secondToLastWordInfo = null;
+              thirdToLastWordInfo = null;
+              fourthToLastWordInfo = null;
+              fifthToLastWordInfo = null;
               prevLineLastWordInfo = null;
               prevLineSecondToLastWordInfo = null;
               prevLineWasNatural = false;
@@ -1344,6 +1448,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
         lastWordInfo = null;
         secondToLastWordInfo = null;
         thirdToLastWordInfo = null;
+        fourthToLastWordInfo = null;
+        fifthToLastWordInfo = null;
         continue;
       }
 
@@ -1377,6 +1483,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
         lastWordInfo = null;
         secondToLastWordInfo = null;
         thirdToLastWordInfo = null;
+        fourthToLastWordInfo = null;
+        fifthToLastWordInfo = null;
         prevLineLastWordInfo = null;
         prevLineSecondToLastWordInfo = null;
         prevLineWasNatural = false;
@@ -1388,6 +1496,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
       currentLine = chunk;
       chunk = "";
       lineWordCount++;
+      fifthToLastWordInfo = fourthToLastWordInfo;
+      fourthToLastWordInfo = thirdToLastWordInfo;
       thirdToLastWordInfo = secondToLastWordInfo;
       secondToLastWordInfo = lastWordInfo;
       lastWordInfo = {
@@ -2045,6 +2155,9 @@ async function processTextNodes(textNodes, mode, settings) {
         node.characters = transformed;
         removeSpuriousHyphens(node);
         if (settings.preventOrphans) {
+          // Two passes: first fixes "и" at line-end, second catches "с" that
+          // slides to line-end after "и" gets joined to the next word.
+          fixOrphansAfterCleanup(node);
           fixOrphansAfterCleanup(node);
         }
         hasNodeChanges = true;
@@ -2058,9 +2171,12 @@ async function processTextNodes(textNodes, mode, settings) {
 
       if (!isResetMode && settings.optimizeLetterSpacing && !mixedTypography) {
         if (optimizeSparseLineTracking(node, nodeSettings)) {
-          // Tracking changes shift line breaks — re-verify hyphens are still at
-          // line ends and remove any that ended up mid-line.
+          // Tracking changes shift line breaks — re-verify hyphens and orphans.
           removeSpuriousHyphens(node);
+          if (settings.preventOrphans) {
+            fixOrphansAfterCleanup(node);
+            fixOrphansAfterCleanup(node);
+          }
           hasNodeChanges = true;
         }
       }

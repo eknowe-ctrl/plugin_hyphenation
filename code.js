@@ -883,6 +883,8 @@
     let lastWordInfo = null;
     let secondToLastWordInfo = null;
     let thirdToLastWordInfo = null;
+    let fourthToLastWordInfo = null;
+    let fifthToLastWordInfo = null;
     let prevLineLastWordInfo = null;
     let prevLineSecondToLastWordInfo = null;
     let prevLineWasNatural = false;
@@ -940,6 +942,8 @@
                         lastWordInfo = null;
                         secondToLastWordInfo = null;
                         thirdToLastWordInfo = null;
+                        fourthToLastWordInfo = null;
+                        fifthToLastWordInfo = null;
                         pendingSpaces = "";
                         chunk = "";
                         break;
@@ -959,6 +963,8 @@
           currentLine = `${linePrefix}${chunk}`;
           chunk = "";
           lineWordCount++;
+          fifthToLastWordInfo = fourthToLastWordInfo;
+          fourthToLastWordInfo = thirdToLastWordInfo;
           thirdToLastWordInfo = secondToLastWordInfo;
           secondToLastWordInfo = lastWordInfo;
           const prevLastWordInfo = lastWordInfo;
@@ -984,7 +990,9 @@
                   lineWordCount = Math.max(0, lineWordCount - 1);
                   lastWordInfo = prevLastWordInfo;
                   secondToLastWordInfo = thirdToLastWordInfo;
-                  thirdToLastWordInfo = null;
+                  thirdToLastWordInfo = fourthToLastWordInfo;
+                  fourthToLastWordInfo = fifthToLastWordInfo;
+                  fifthToLastWordInfo = null;
                   processingQueue.splice(qIdx, pi - qIdx + 1);
                   processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
                   if (spacesForWord.length > 0) {
@@ -1025,12 +1033,14 @@
             lastWordInfo = null;
             secondToLastWordInfo = null;
             thirdToLastWordInfo = null;
+            fourthToLastWordInfo = null;
+            fifthToLastWordInfo = null;
             prevLineLastWordInfo = null;
             prevLineSecondToLastWordInfo = null;
             prevLineWasNatural = false;
             continue;
           }
-          const lbWordCount = lineWordCount === 2 || lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse;
+          const lbWordCount = lineWordCount === 2 || lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse;
           if (lbWordCount && lastWordInfo !== null && (!reachedConsecutiveLimit || isLineSparse)) {
             const lw = lastWordInfo;
             const remainingForLw = maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
@@ -1055,13 +1065,15 @@
               lastWordInfo = null;
               secondToLastWordInfo = null;
               thirdToLastWordInfo = null;
+              fourthToLastWordInfo = null;
+              fifthToLastWordInfo = null;
               prevLineLastWordInfo = null;
               prevLineSecondToLastWordInfo = null;
               prevLineWasNatural = false;
               chunk = "";
               break;
             }
-            if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse && secondToLastWordInfo !== null) {
+            if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse && secondToLastWordInfo !== null) {
               const slw = secondToLastWordInfo;
               const remainingForSlw = maxWidth - measureWidth(slw.currentLineBefore + slw.spacesBeforeWord);
               const slwBreak = findBestBreakInToken(
@@ -1089,6 +1101,8 @@
                 lastWordInfo = null;
                 secondToLastWordInfo = null;
                 thirdToLastWordInfo = null;
+                fourthToLastWordInfo = null;
+                fifthToLastWordInfo = null;
                 prevLineLastWordInfo = null;
                 prevLineSecondToLastWordInfo = null;
                 prevLineWasNatural = false;
@@ -1096,7 +1110,7 @@
                 break;
               }
             }
-            if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse && thirdToLastWordInfo !== null) {
+            if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse && thirdToLastWordInfo !== null) {
               const tlw = thirdToLastWordInfo;
               const slw = secondToLastWordInfo;
               const remainingForTlw = maxWidth - measureWidth(tlw.currentLineBefore + tlw.spacesBeforeWord);
@@ -1127,6 +1141,97 @@
                 lastWordInfo = null;
                 secondToLastWordInfo = null;
                 thirdToLastWordInfo = null;
+                fourthToLastWordInfo = null;
+                fifthToLastWordInfo = null;
+                prevLineLastWordInfo = null;
+                prevLineSecondToLastWordInfo = null;
+                prevLineWasNatural = false;
+                chunk = "";
+                break;
+              }
+            }
+            if (lineWordCount >= 4 && lineWordCount <= 7 && isLineSparse && fourthToLastWordInfo !== null) {
+              const flw = fourthToLastWordInfo;
+              const tlw = thirdToLastWordInfo;
+              const slw = secondToLastWordInfo;
+              const remainingForFlw = maxWidth - measureWidth(flw.currentLineBefore + flw.spacesBeforeWord);
+              const flwBreak = findBestBreakInToken(
+                flw.token,
+                remainingForFlw,
+                measureWidth,
+                options
+              );
+              if (flwBreak) {
+                result = result.slice(0, flw.resultLenBeforeSpaces);
+                result += flw.spacesBeforeWord + flwBreak.left + INSERTED_BREAK_MARKER;
+                insertedBreaks += 1;
+                consecutiveHyphenLines += 1;
+                const rawPushBack4 = [
+                  flwBreak.right,
+                  ...tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : [],
+                  ...tlw ? [tlw.token] : [],
+                  ...slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : [],
+                  ...slw ? [slw.token] : [],
+                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
+                  lw.token,
+                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
+                  token
+                ];
+                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack4));
+                currentLine = "";
+                linePrefix = "";
+                lineWordCount = 0;
+                lastWordInfo = null;
+                secondToLastWordInfo = null;
+                thirdToLastWordInfo = null;
+                fourthToLastWordInfo = null;
+                fifthToLastWordInfo = null;
+                prevLineLastWordInfo = null;
+                prevLineSecondToLastWordInfo = null;
+                prevLineWasNatural = false;
+                chunk = "";
+                break;
+              }
+            }
+            if (lineWordCount >= 5 && lineWordCount <= 7 && isLineSparse && fifthToLastWordInfo !== null) {
+              const xw = fifthToLastWordInfo;
+              const flw = fourthToLastWordInfo;
+              const tlw = thirdToLastWordInfo;
+              const slw = secondToLastWordInfo;
+              const remainingForXw = maxWidth - measureWidth(xw.currentLineBefore + xw.spacesBeforeWord);
+              const xwBreak = findBestBreakInToken(
+                xw.token,
+                remainingForXw,
+                measureWidth,
+                options
+              );
+              if (xwBreak) {
+                result = result.slice(0, xw.resultLenBeforeSpaces);
+                result += xw.spacesBeforeWord + xwBreak.left + INSERTED_BREAK_MARKER;
+                insertedBreaks += 1;
+                consecutiveHyphenLines += 1;
+                const rawPushBack5 = [
+                  xwBreak.right,
+                  ...flw && flw.spacesBeforeWord ? [flw.spacesBeforeWord] : [],
+                  ...flw ? [flw.token] : [],
+                  ...tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : [],
+                  ...tlw ? [tlw.token] : [],
+                  ...slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : [],
+                  ...slw ? [slw.token] : [],
+                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
+                  lw.token,
+                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
+                  token
+                ];
+                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack5));
+                currentLine = "";
+                linePrefix = "";
+                lineWordCount = 0;
+                lastWordInfo = null;
+                secondToLastWordInfo = null;
+                thirdToLastWordInfo = null;
+                fourthToLastWordInfo = null;
+                fifthToLastWordInfo = null;
                 prevLineLastWordInfo = null;
                 prevLineSecondToLastWordInfo = null;
                 prevLineWasNatural = false;
@@ -1147,6 +1252,8 @@
           lastWordInfo = null;
           secondToLastWordInfo = null;
           thirdToLastWordInfo = null;
+          fourthToLastWordInfo = null;
+          fifthToLastWordInfo = null;
           continue;
         }
         if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
@@ -1176,6 +1283,8 @@
           lastWordInfo = null;
           secondToLastWordInfo = null;
           thirdToLastWordInfo = null;
+          fourthToLastWordInfo = null;
+          fifthToLastWordInfo = null;
           prevLineLastWordInfo = null;
           prevLineSecondToLastWordInfo = null;
           prevLineWasNatural = false;
@@ -1186,6 +1295,8 @@
         currentLine = chunk;
         chunk = "";
         lineWordCount++;
+        fifthToLastWordInfo = fourthToLastWordInfo;
+        fourthToLastWordInfo = thirdToLastWordInfo;
         thirdToLastWordInfo = secondToLastWordInfo;
         secondToLastWordInfo = lastWordInfo;
         lastWordInfo = {
@@ -1719,6 +1830,7 @@
             removeSpuriousHyphens(node);
             if (settings.preventOrphans) {
               fixOrphansAfterCleanup(node);
+              fixOrphansAfterCleanup(node);
             }
             hasNodeChanges = true;
           }
@@ -1730,6 +1842,10 @@
           if (!isResetMode && settings.optimizeLetterSpacing && !mixedTypography) {
             if (optimizeSparseLineTracking(node, nodeSettings)) {
               removeSpuriousHyphens(node);
+              if (settings.preventOrphans) {
+                fixOrphansAfterCleanup(node);
+                fixOrphansAfterCleanup(node);
+              }
               hasNodeChanges = true;
             }
           }
