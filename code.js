@@ -179,7 +179,7 @@
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
   var WIDTH_EPSILON = 0.01;
   var SPARSE_LINE_FILL_THRESHOLD = 0.75;
-  var SPARSE_GAP_FRACTION = 0.04;
+  var SPARSE_GAP_FRACTION = 0.03;
   var WIDOW_WORD_THRESHOLD = 8;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;

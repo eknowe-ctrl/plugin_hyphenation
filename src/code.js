@@ -15,7 +15,7 @@ const WIDTH_EPSILON = 0.01;
 const SPARSE_LINE_FILL_THRESHOLD = 0.75;
 // Extra justified gap per inter-word space as fraction of line width.
 // Catches visually sparse lines with short words even when fill > 75%.
-const SPARSE_GAP_FRACTION = 0.040;
+const SPARSE_GAP_FRACTION = 0.030;
 const WIDOW_WORD_THRESHOLD = 8;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
