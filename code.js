@@ -247,7 +247,7 @@
   var autoRecalcQueued = false;
   var suppressDocumentChangeUntil = 0;
   var manualActionInProgress = false;
-  var runtimeSettings = __spreadValues({}, DEFAULT_SETTINGS);
+  var runtimeSettings = Object.assign({}, DEFAULT_SETTINGS);
   function clampNumber(value, minValue, maxValue) {
     if (Number.isNaN(value)) {
       return minValue;
@@ -262,49 +262,48 @@
     return Math.round(clampNumber(parsed, UI_MIN_HEIGHT, UI_MAX_HEIGHT));
   }
   function normalizeSettings(input) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
     const src = input && typeof input === "object" ? input : {};
     const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
     const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
     const autoNbsp = typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
     const optimizeLetterSpacing = typeof src.optimizeLetterSpacing === "boolean" ? src.optimizeLetterSpacing : DEFAULT_SETTINGS.optimizeLetterSpacing;
     const minWordLengthForHyphenation = clampNumber(
-      Number((_a = src.minWordLengthForHyphenation) != null ? _a : DEFAULT_SETTINGS.minWordLengthForHyphenation),
+      Number(src.minWordLengthForHyphenation != null ? src.minWordLengthForHyphenation : DEFAULT_SETTINGS.minWordLengthForHyphenation),
       4,
       12
     );
     const minLettersBeforeHyphen = clampNumber(
-      Number((_b = src.minLettersBeforeHyphen) != null ? _b : DEFAULT_SETTINGS.minLettersBeforeHyphen),
+      Number(src.minLettersBeforeHyphen != null ? src.minLettersBeforeHyphen : DEFAULT_SETTINGS.minLettersBeforeHyphen),
       1,
       5
     );
     const minLettersAfterHyphen = clampNumber(
-      Number((_c = src.minLettersAfterHyphen) != null ? _c : DEFAULT_SETTINGS.minLettersAfterHyphen),
+      Number(src.minLettersAfterHyphen != null ? src.minLettersAfterHyphen : DEFAULT_SETTINGS.minLettersAfterHyphen),
       1,
       5
     );
     const maxConsecutiveHyphens = clampNumber(
-      Number((_d = src.maxConsecutiveHyphens) != null ? _d : DEFAULT_SETTINGS.maxConsecutiveHyphens),
+      Number(src.maxConsecutiveHyphens != null ? src.maxConsecutiveHyphens : DEFAULT_SETTINGS.maxConsecutiveHyphens),
       0,
       5
     );
     const minPercent = clampNumber(
-      Number((_e = src.letterSpacingMinPercent) != null ? _e : DEFAULT_SETTINGS.letterSpacingMinPercent),
+      Number(src.letterSpacingMinPercent != null ? src.letterSpacingMinPercent : DEFAULT_SETTINGS.letterSpacingMinPercent),
       -10,
       10
     );
     const desiredPercent = clampNumber(
-      Number((_f = src.letterSpacingDesiredPercent) != null ? _f : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
+      Number(src.letterSpacingDesiredPercent != null ? src.letterSpacingDesiredPercent : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
       -10,
       10
     );
     const maxPercent = clampNumber(
-      Number((_g = src.letterSpacingMaxPercent) != null ? _g : DEFAULT_SETTINGS.letterSpacingMaxPercent),
+      Number(src.letterSpacingMaxPercent != null ? src.letterSpacingMaxPercent : DEFAULT_SETTINGS.letterSpacingMaxPercent),
       -10,
       10
     );
     const stepPercent = clampNumber(
-      Number((_h = src.letterSpacingStepPercent) != null ? _h : DEFAULT_SETTINGS.letterSpacingStepPercent),
+      Number(src.letterSpacingStepPercent != null ? src.letterSpacingStepPercent : DEFAULT_SETTINGS.letterSpacingStepPercent),
       0.1,
       5
     );
@@ -332,7 +331,7 @@
     if (charsPerLine >= 45) {
       return baseSettings;
     }
-    const s = __spreadValues({}, baseSettings);
+    const s = Object.assign({}, baseSettings);
     if (charsPerLine < 30) {
       s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
       s.minLettersBeforeHyphen = Math.min(s.minLettersBeforeHyphen, 2);
@@ -781,11 +780,10 @@
     return out;
   }
   function getAllBreakOffsetsInToken(token, options) {
-    var _a, _b, _c;
-    const minWordLength = (_a = options == null ? void 0 : options.minWordLengthForHyphenation) != null ? _a : 4;
-    const minBefore = (_b = options == null ? void 0 : options.minLettersBeforeHyphen) != null ? _b : 2;
-    const minAfter = (_c = options == null ? void 0 : options.minLettersAfterHyphen) != null ? _c : 3;
-    const forbidden = (options == null ? void 0 : options.forbiddenBreaks) instanceof Set ? options.forbiddenBreaks : null;
+    const minWordLength = options != null && options.minWordLengthForHyphenation != null ? options.minWordLengthForHyphenation : 4;
+    const minBefore = options != null && options.minLettersBeforeHyphen != null ? options.minLettersBeforeHyphen : 2;
+    const minAfter = options != null && options.minLettersAfterHyphen != null ? options.minLettersAfterHyphen : 3;
+    const forbidden = options != null && options.forbiddenBreaks instanceof Set ? options.forbiddenBreaks : null;
     const match = token.match(RUSSIAN_TOKEN_REGEX);
     if (!match) return [];
     const leading = match[1];
@@ -984,7 +982,9 @@
                 const nextTok = processingQueue[pi];
                 const interSp = processingQueue.slice(qIdx, pi).join("");
                 const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9«"(„]/.test(nextTok);
-                if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
+                const fillAfterRollback = maxWidth > 0 ? measureWidth(currentLineBeforeSpaces) / maxWidth : 0;
+                const shouldSkipRollback = cyrillicOnly.length >= 3 && fillAfterRollback < 0.93;
+                if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth) && !shouldSkipRollback) {
                   result = result.slice(0, resultLenBeforeSpaces);
                   currentLine = currentLineBeforeSpaces;
                   lineWordCount = Math.max(0, lineWordCount - 1);
@@ -2064,6 +2064,12 @@
           runtimeSettings = normalizeSettings(__spreadValues(__spreadValues({}, runtimeSettings), message.settings));
           yield persistRuntimeSettings();
           postUiSettings();
+          return;
+        }
+        if (message.type === "open-external") {
+          if (typeof message.url === "string" && message.url.length > 0) {
+            figma.openExternal(message.url);
+          }
           return;
         }
         if (message.type === APPLY_MODE || message.type === RESET_MODE) {

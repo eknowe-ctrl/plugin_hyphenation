@@ -87,7 +87,7 @@ let autoRecalcInProgress = false;
 let autoRecalcQueued = false;
 let suppressDocumentChangeUntil = 0;
 let manualActionInProgress = false;
-let runtimeSettings = { ...DEFAULT_SETTINGS };
+let runtimeSettings = Object.assign({}, DEFAULT_SETTINGS);
 let documentChangeWatchSupported = true;
 
 function clampNumber(value, minValue, maxValue) {
@@ -120,36 +120,36 @@ function normalizeSettings(input) {
       : DEFAULT_SETTINGS.optimizeLetterSpacing;
 
   const minWordLengthForHyphenation = clampNumber(
-    Number(src.minWordLengthForHyphenation ?? DEFAULT_SETTINGS.minWordLengthForHyphenation),
+    Number(src.minWordLengthForHyphenation != null ? src.minWordLengthForHyphenation : DEFAULT_SETTINGS.minWordLengthForHyphenation),
     4, 12
   );
 
   const minLettersBeforeHyphen = clampNumber(
-    Number(src.minLettersBeforeHyphen ?? DEFAULT_SETTINGS.minLettersBeforeHyphen),
+    Number(src.minLettersBeforeHyphen != null ? src.minLettersBeforeHyphen : DEFAULT_SETTINGS.minLettersBeforeHyphen),
     1, 5
   );
 
   const minLettersAfterHyphen = clampNumber(
-    Number(src.minLettersAfterHyphen ?? DEFAULT_SETTINGS.minLettersAfterHyphen),
+    Number(src.minLettersAfterHyphen != null ? src.minLettersAfterHyphen : DEFAULT_SETTINGS.minLettersAfterHyphen),
     1, 5
   );
 
   const maxConsecutiveHyphens = clampNumber(
-    Number(src.maxConsecutiveHyphens ?? DEFAULT_SETTINGS.maxConsecutiveHyphens),
+    Number(src.maxConsecutiveHyphens != null ? src.maxConsecutiveHyphens : DEFAULT_SETTINGS.maxConsecutiveHyphens),
     0, 5
   );
 
   const minPercent = clampNumber(
-    Number(src.letterSpacingMinPercent ?? DEFAULT_SETTINGS.letterSpacingMinPercent), -10, 10
+    Number(src.letterSpacingMinPercent != null ? src.letterSpacingMinPercent : DEFAULT_SETTINGS.letterSpacingMinPercent), -10, 10
   );
   const desiredPercent = clampNumber(
-    Number(src.letterSpacingDesiredPercent ?? DEFAULT_SETTINGS.letterSpacingDesiredPercent), -10, 10
+    Number(src.letterSpacingDesiredPercent != null ? src.letterSpacingDesiredPercent : DEFAULT_SETTINGS.letterSpacingDesiredPercent), -10, 10
   );
   const maxPercent = clampNumber(
-    Number(src.letterSpacingMaxPercent ?? DEFAULT_SETTINGS.letterSpacingMaxPercent), -10, 10
+    Number(src.letterSpacingMaxPercent != null ? src.letterSpacingMaxPercent : DEFAULT_SETTINGS.letterSpacingMaxPercent), -10, 10
   );
   const stepPercent = clampNumber(
-    Number(src.letterSpacingStepPercent ?? DEFAULT_SETTINGS.letterSpacingStepPercent), 0.1, 5
+    Number(src.letterSpacingStepPercent != null ? src.letterSpacingStepPercent : DEFAULT_SETTINGS.letterSpacingStepPercent), 0.1, 5
   );
 
   const sortedMin = Math.min(minPercent, maxPercent);
@@ -186,7 +186,7 @@ function deriveSettingsForNode(node, baseSettings) {
     return baseSettings; // wide column — user settings are fine
   }
 
-  const s = { ...baseSettings };
+  const s = Object.assign({}, baseSettings);
 
   if (charsPerLine < 30) {
     // Narrow column: hyphenate shorter words and allow tighter splits.
@@ -855,10 +855,10 @@ function preJoinOrphansInQueue(arr) {
 // Returns all valid hyphenation offsets within token (chars from token start),
 // ordered from longest-left to shortest-left. No width filtering — caller verifies.
 function getAllBreakOffsetsInToken(token, options) {
-  const minWordLength = options?.minWordLengthForHyphenation ?? 4;
-  const minBefore = options?.minLettersBeforeHyphen ?? 2;
-  const minAfter = options?.minLettersAfterHyphen ?? 3;
-  const forbidden = options?.forbiddenBreaks instanceof Set ? options.forbiddenBreaks : null;
+  const minWordLength = (options != null && options.minWordLengthForHyphenation != null) ? options.minWordLengthForHyphenation : 4;
+  const minBefore = (options != null && options.minLettersBeforeHyphen != null) ? options.minLettersBeforeHyphen : 2;
+  const minAfter = (options != null && options.minLettersAfterHyphen != null) ? options.minLettersAfterHyphen : 3;
+  const forbidden = (options != null && options.forbiddenBreaks instanceof Set) ? options.forbiddenBreaks : null;
 
   const match = token.match(RUSSIAN_TOKEN_REGEX);
   if (!match) return [];
@@ -1155,7 +1155,14 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
               const nextTok = processingQueue[pi];
               const interSp = processingQueue.slice(qIdx, pi).join("");
               const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9«"(„]/.test(nextTok);
-              if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
+              const fillAfterRollback = maxWidth > 0
+                ? measureWidth(currentLineBeforeSpaces) / maxWidth
+                : 0;
+              // For single-letter prepositions (1–2 chars) always rollback.
+              // For longer conjunctions like "или" (3+ chars), skip rollback if
+              // doing so would create excessive justified gaps (fill < 0.93).
+              const shouldSkipRollback = cyrillicOnly.length >= 3 && fillAfterRollback < 0.93;
+              if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth) && !shouldSkipRollback) {
                 result = result.slice(0, resultLenBeforeSpaces);
                 currentLine = currentLineBeforeSpaces;
                 lineWordCount = Math.max(0, lineWordCount - 1);
