@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS = {
   maxConsecutiveHyphens: 2,
   letterSpacingMinPercent: -1,
   letterSpacingDesiredPercent: 0,
-  letterSpacingMaxPercent: 2,
+  letterSpacingMaxPercent: 8,
   letterSpacingStepPercent: 0.5
 };
 
