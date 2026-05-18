@@ -13,6 +13,10 @@ const SPACE_TOKEN_REGEX = /^[^\S\n ]+$/;
 const RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
 const WIDTH_EPSILON = 0.01;
 const SPARSE_LINE_FILL_THRESHOLD = 0.75;
+// Extra justified gap per inter-word space as fraction of line width.
+// Catches visually sparse lines with short words even when fill > 75%.
+const SPARSE_GAP_FRACTION = 0.040;
+const WIDOW_WORD_THRESHOLD = 8;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
 const SELF_CHANGE_SUPPRESS_MS = 600;
@@ -70,7 +74,7 @@ const DEFAULT_SETTINGS = {
   minLettersBeforeHyphen: 2,
   minLettersAfterHyphen: 3,
   maxConsecutiveHyphens: 2,
-  letterSpacingMinPercent: -3,
+  letterSpacingMinPercent: -1,
   letterSpacingDesiredPercent: 0,
   letterSpacingMaxPercent: 2,
   letterSpacingStepPercent: 0.5
@@ -185,24 +189,16 @@ function deriveSettingsForNode(node, baseSettings) {
   const s = { ...baseSettings };
 
   if (charsPerLine < 30) {
-    // Narrow column: hyphenate shorter words, allow tighter splits, compress more.
+    // Narrow column: hyphenate shorter words and allow tighter splits.
+    // Letter spacing range is intentionally left to the user's settings.
     s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
     s.minLettersBeforeHyphen      = Math.min(s.minLettersBeforeHyphen, 2);
     s.minLettersAfterHyphen       = Math.min(s.minLettersAfterHyphen, 2);
-    s.letterSpacingMinPercent     = Math.min(s.letterSpacingMinPercent, -5);
   } else {
     // Medium column (30–44 chars): moderate tightening.
     s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
     s.minLettersAfterHyphen       = Math.min(s.minLettersAfterHyphen, 3);
-    s.letterSpacingMinPercent     = Math.min(s.letterSpacingMinPercent, -4);
   }
-
-  // Keep min ≤ desired ≤ max consistent after any adjustments.
-  s.letterSpacingMinPercent =
-    Math.min(s.letterSpacingMinPercent, s.letterSpacingMaxPercent);
-  s.letterSpacingDesiredPercent =
-    Math.max(s.letterSpacingMinPercent,
-      Math.min(s.letterSpacingDesiredPercent, s.letterSpacingMaxPercent));
 
   return s;
 }
@@ -296,7 +292,7 @@ function preventRussianOrphans(text) {
   // starts at "у" with no preceding space visible to the pattern — "у" is skipped.
   // Separator [^\S\n\u00A0]+ excludes NBSP: once "у" gets NBSP, the next pass
   // won't re-consume that NBSP as a separator and re-match "у" (no-op loop).
-  const pattern = /(?:^|(?<=[\s(«„“”']))([\u0410-\u042F\u0401\u0430-\u044F\u0451]{1,3})[^\S\n\u00A0]+(?=[\u0410-\u042F\u0401\u0430-\u044F\u04510-9])/g;
+  const pattern = /(?:^|(?<=[\s(«„“”']))([\u0410-\u042F\u0401\u0430-\u044F\u0451]{1,3})[^\S\n\u00A0]+(?=[\u0410-\u042F\u0401\u0430-\u044F\u04510-9\u00AB"(\u201E])/g;
   let prev = "";
   let current = text;
   while (current !== prev) {
@@ -432,8 +428,456 @@ function removeSpuriousHyphens(node) {
   }
 }
 
+// After removeSpuriousHyphens the layout may have shifted, leaving some
+// prepositions at line ends that the simulation never saw. We probe each
+// candidate by inserting a hard newline: if the height doesn't increase the
+// break was already there → confirmed orphan → replace space with NBSP.
+function fixOrphansAfterCleanup(node) {
+  const text = node.characters;
+
+  // Find spaces that follow a 1-3-letter Cyrillic orphan word and precede
+  // the next word. Negative lookbehind ensures we don't match a suffix of a
+  // longer word.
+  const candidates = [];
+  const re = /(?<![А-ЯЁа-яё])([А-ЯЁа-яё]{1,3}) (?=[А-ЯЁа-яё0-9«"(„])/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (!ORPHAN_WORDS.has(m[1].toLowerCase())) continue;
+    candidates.push(m.index + m[1].length); // index of the space
+  }
+
+  if (candidates.length === 0) return false;
+
+  const probe = node.clone();
+  probe.visible = false;
+  probe.x = -100000;
+  probe.y = -100000;
+  probe.textAutoResize = "HEIGHT";
+
+  try {
+    probe.characters = text;
+    const baselineHeight = probe.height;
+
+    const confirmed = [];
+    for (const spacePos of candidates) {
+      const testText = text.slice(0, spacePos) + "\n" + text.slice(spacePos + 1);
+      probe.characters = testText;
+      // Height same (within 0.5 px) → newline was redundant → natural break already there
+      if (probe.height < baselineHeight + 0.5) {
+        confirmed.push(spacePos);
+      }
+    }
+
+    if (confirmed.length === 0) return false;
+
+    let result = text;
+    for (let i = confirmed.length - 1; i >= 0; i--) {
+      const pos = confirmed[i];
+      result = result.slice(0, pos) + NBSP + result.slice(pos + 1);
+    }
+    node.characters = result;
+    return true;
+  } finally {
+    probe.remove();
+  }
+}
+
+// After the greedy hyphenation pass, detect lines that are still sparse in
+// Figma's ACTUAL rendering (not in the plugin's own simulation) and pull
+// the first word of the next line onto the sparse line via hyphenation.
+// This corrects discrepancies between the simulation and Figma's layout engine.
+function addHyphensForSparseLines(node, settings) {
+  // Disabled: ZWS-based second-pass cannot pull content from the next line.
+  // Figma wraps at spaces before ZWS, so words placed on the next line stay
+  // there even with a ZWS marker inside — the hyphen appears mid-line.
+  return false;
+  const text = node.characters;
+  if (!text || text.length === 0) return false;
+  const colW = node.width;
+  if (colW <= 0) return false;
+
+  const paraSpacingPx = typeof node.paragraphSpacing === "number"
+    ? node.paragraphSpacing : 0;
+  const globalTracking = getNodeLetterSpacing(node);
+
+  const heightProbe = node.clone();
+  heightProbe.visible = false;
+  heightProbe.x = -100004;
+  heightProbe.y = -100000;
+  heightProbe.textAutoResize = "HEIGHT";
+
+  const widthProbe = node.clone();
+  widthProbe.visible = false;
+  widthProbe.x = -100006;
+  widthProbe.y = -100000;
+  widthProbe.textAutoResize = "WIDTH_AND_HEIGHT";
+  widthProbe.letterSpacing = globalTracking;
+
+  const measureW = (t) => {
+    widthProbe.characters = t;
+    return widthProbe.width;
+  };
+
+  try {
+    heightProbe.characters = text;
+    const baseHeight = heightProbe.height;
+    const wrapThreshold = baseHeight + paraSpacingPx + 0.5;
+
+    // Detect all actual Figma line-break positions using height probe.
+    // A wrap is confirmed when replacing that character with "\n" does NOT
+    // increase height beyond the paragraph-spacing allowance — meaning Figma
+    // was already breaking there.
+    //
+    // We check both regular spaces (type "soft") AND zero-width spaces inside
+    // existing INSERTED_BREAK_MARKERs (type "zws").  Before this fix only
+    // spaces were checked, so after the first hyphenation pass inserted many
+    // ZWS breaks the lineStart pointer never advanced past them and subsequent
+    // fillRatio calculations spanned multiple visual lines.
+
+    const events = [];
+
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") { events.push({ pos: i, type: "para" }); continue; }
+      if (text[i] !== " ") continue;
+      const testText = text.slice(0, i) + "\n" + text.slice(i + 1);
+      heightProbe.characters = testText;
+      if (heightProbe.height <= wrapThreshold) events.push({ pos: i, type: "soft" });
+    }
+
+    // Also probe every ZWS inside existing markers.
+    let searchIdx = 0;
+    while (true) {
+      const mPos = text.indexOf(INSERTED_BREAK_MARKER, searchIdx);
+      if (mPos === -1) break;
+      const zwsCharPos = mPos + 1; // INSERTED_BREAK_MARKER = "-​"; ZWS is at index 1
+      const testText = text.slice(0, zwsCharPos) + "\n" + text.slice(zwsCharPos + 1);
+      heightProbe.characters = testText;
+      if (heightProbe.height <= wrapThreshold) events.push({ pos: zwsCharPos, type: "zws" });
+      searchIdx = mPos + 1;
+    }
+
+    events.sort((a, b) => a.pos - b.pos);
+
+    const hasSoftWrap = events.some((e) => e.type === "soft");
+    if (!hasSoftWrap) return false; // nothing to fix: all breaks are already at ZWS or para
+
+    const fixes = [];
+    let lineStart = 0;
+    // After accepting a fix the immediately following soft-wrap line has
+    // different content in the modified text — skip its sparse check to avoid
+    // double-fixing based on stale positions.
+    let skipNextSoftFill = false;
+
+    for (const { pos, type } of events) {
+      if (type === "para") { lineStart = pos + 1; skipNextSoftFill = false; continue; }
+
+      const lineEnd = pos;
+      const nextStart = pos + 1;
+
+      if (type === "soft" && lineEnd > lineStart) {
+        const lineContent = text.slice(lineStart, lineEnd);
+        widthProbe.characters = lineContent;
+        const fillRatio = widthProbe.width / colW;
+
+        console.log("[SparseLineFix] line fill=", fillRatio.toFixed(2),
+          "content=", lineContent.slice(0, 40));
+
+        // fillRatio < 0.30 → paragraph-ending orphan line; hyphenation of the
+        // next word cannot pull content back to fill it (ZWS verify always fails
+        // because the next word fits the next line without overflow).
+        const shouldFix = fillRatio < SPARSE_LINE_FILL_THRESHOLD &&
+                          fillRatio >= 0.30 &&
+                          !skipNextSoftFill;
+        skipNextSoftFill = false;
+
+        if (shouldFix) {
+          // Locate first word of the next line.
+          // Skip leading ZWS and NBSP (non-breaking space, U+00A0) — NBSP is
+          // often used in Russian text between short prepositions and their
+          // following word, which would otherwise merge them into one "word".
+          let wordStart = nextStart;
+          while (wordStart < text.length &&
+                 (text[wordStart] === ZERO_WIDTH_SPACE ||
+                  text[wordStart] === " ")) wordStart++;
+          let wordEnd = wordStart;
+          while (wordEnd < text.length &&
+                 text[wordEnd] !== " " &&
+                 text[wordEnd] !== " " &&
+                 text[wordEnd] !== "\n" &&
+                 text[wordEnd] !== ZERO_WIDTH_SPACE) {
+            wordEnd++;
+          }
+
+          if (wordEnd > wordStart) {
+            const nextWord = text.slice(wordStart, wordEnd);
+            const breakOffsets = getAllBreakOffsetsInToken(nextWord, settings);
+            console.log("[SparseLineFix] sparse! next word=", nextWord,
+              "break offsets=", breakOffsets);
+
+            for (const offsetInWord of breakOffsets) {
+              // Two-condition width check:
+              // 1. "lineContent W1-" fills the sparse line (>= threshold, <= colW)
+              //    → the fragment fits without overflow.
+              // 2. "lineContent W1-W2" OVERFLOWS the column (> colW)
+              //    → Figma is forced to wrap at the ZWS between W1- and W2.
+              //    Without condition 2, Figma ignores ZWS and keeps "W1-W2" on
+              //    the same line (mid-line hyphen).
+              const w1 = nextWord.slice(0, offsetInWord);
+              const w2 = nextWord.slice(offsetInWord);
+              widthProbe.characters = lineContent + " " + w1 + "-";
+              const newFillRatio = widthProbe.width / colW;
+              widthProbe.characters = lineContent + " " + w1 + "-" + w2;
+              const fullFillRatio = widthProbe.width / colW;
+              const accepted = newFillRatio >= SPARSE_LINE_FILL_THRESHOLD &&
+                               newFillRatio <= 1.0 &&
+                               fullFillRatio > 1.0;
+              console.log("[SparseLineFix] offset=", offsetInWord,
+                "w1fill=", newFillRatio.toFixed(2),
+                "fullFill=", fullFillRatio.toFixed(2),
+                accepted ? "ACCEPTED" : "rejected");
+              if (accepted) {
+                fixes.push({ insertPos: wordStart + offsetInWord });
+                skipNextSoftFill = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Always advance lineStart past confirmed wrap points (both space and ZWS).
+      lineStart = nextStart;
+    }
+
+    if (fixes.length === 0) return false;
+
+    let newText = text;
+    for (const { insertPos } of [...fixes].sort((a, b) => b.insertPos - a.insertPos)) {
+      newText = newText.slice(0, insertPos) + INSERTED_BREAK_MARKER + newText.slice(insertPos);
+    }
+    node.characters = newText;
+    return true;
+  } finally {
+    heightProbe.remove();
+    widthProbe.remove();
+  }
+}
+
+// After global tracking is set, find lines that Figma still justifies with large
+// gaps and expand their letter spacing individually via setRangeLetterSpacing.
+// Only called when optimizeLetterSpacing is enabled and the node has uniform
+// (non-mixed) typography so that range writes are safe.
+function optimizeSparseLineTracking(node, settings) {
+  const text = node.characters;
+  if (!text || text.length === 0) return false;
+
+  const colW = node.width;
+  if (colW <= 0) return false;
+
+  const fontSize = typeof node.fontSize === "number" && node.fontSize > 0
+    ? node.fontSize : 16;
+  const globalTracking = getNodeLetterSpacing(node);
+  const globalPercent = convertNodeSpacingToPercent(globalTracking, node);
+  const maxPercent = settings.letterSpacingMaxPercent;
+
+  // Per-line expansion can go up to the user's maximum (hard cap).
+  // No early exit based on globalPercent — even if global already sits at max,
+  // there may be nothing to expand (sparseCandidates will be empty), but we let
+  // the loop decide rather than bailing out here.
+  const perLineMax = maxPercent;
+
+  // --- height probe: find soft-wrap positions ---
+  const heightProbe = node.clone();
+  heightProbe.visible = false;
+  heightProbe.x = -100000;
+  heightProbe.y = -100000;
+  heightProbe.textAutoResize = "HEIGHT";
+
+  // --- width probe: measure natural line width at current tracking ---
+  const widthProbe = node.clone();
+  widthProbe.visible = false;
+  widthProbe.x = -100002;
+  widthProbe.y = -100000;
+  widthProbe.textAutoResize = "WIDTH_AND_HEIGHT";
+  widthProbe.letterSpacing = globalTracking;
+
+  // When \n replaces a soft-wrap space, Figma converts the soft-wrap into a
+  // paragraph break, adding paragraphSpacing to the total height even though
+  // no new LINE was added.  We must account for this in the threshold.
+  const paraSpacingPx = typeof node.paragraphSpacing === "number"
+    ? node.paragraphSpacing : 0;
+
+  try {
+    heightProbe.characters = text;
+    const baseHeight = heightProbe.height;
+
+    // Collect positions of regular spaces (not NBSP) that are soft-wrap breaks.
+    // Threshold: inserting \n at a soft-wrap adds at most paragraphSpacing to
+    // height. Inserting at a non-wrap adds at least one lineHeight (>> paraSpacing).
+    const softWrapThreshold = baseHeight + paraSpacingPx + 0.5;
+    const softWrapPos = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== " ") continue;
+      const testText = text.slice(0, i) + "\n" + text.slice(i + 1);
+      heightProbe.characters = testText;
+      if (heightProbe.height <= softWrapThreshold) {
+        softWrapPos.push(i);
+      }
+    }
+
+    if (softWrapPos.length === 0) return false;
+
+    // Build a unified event list:
+    //  "soft"   – regular-space soft-wrap (found by height probe above)
+    //  "hyphen" – INSERTED_BREAK_MARKER already confirmed by removeSpuriousHyphens
+    //  "para"   – explicit \n paragraph break
+    //
+    // Processing order: advance lineStart at every boundary; only attempt
+    // tracking expansion on soft-wrap lines (not hyphenated or para-last lines).
+    const events = softWrapPos.map((pos) => ({ pos, type: "soft" }));
+
+    // All remaining INSERTED_BREAK_MARKERs are real line breaks.
+    const markerLen = INSERTED_BREAK_MARKER.length;
+    let searchIdx = 0;
+    while (true) {
+      const mPos = text.indexOf(INSERTED_BREAK_MARKER, searchIdx);
+      if (mPos === -1) break;
+      events.push({ pos: mPos, type: "hyphen" });
+      searchIdx = mPos + 1;
+    }
+
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") events.push({ pos: i, type: "para" });
+    }
+    events.sort((a, b) => a.pos - b.pos);
+
+    const TARGET_FILL = 0.90;
+    const sparseCandidates = [];
+    let lineStart = 0;
+
+    for (const { pos, type } of events) {
+      if (type === "para") {
+        lineStart = pos + 1;
+        continue;
+      }
+
+      // Line content and where the next line starts depend on break type.
+      let lineEnd, nextStart;
+      if (type === "soft") {
+        lineEnd = pos;          // exclude the break space
+        nextStart = pos + 1;
+      } else {                  // "hyphen": marker = "-​" (2 chars)
+        lineEnd = pos + markerLen;  // include the "-​" marker
+        nextStart = pos + markerLen;
+      }
+
+      if (type === "soft" && lineEnd > lineStart) {
+        const lineContent = text.slice(lineStart, lineEnd);
+        widthProbe.characters = lineContent;
+        const naturalWidth = widthProbe.width;
+        const fillRatio = naturalWidth / colW;
+
+        const wordCount = (lineContent.match(/\S+/g) || []).length;
+        const extraGapFraction = wordCount > 1 ? (1 - fillRatio) / (wordCount - 1) : 0;
+        const lineIsSparse = fillRatio < SPARSE_LINE_FILL_THRESHOLD ||
+          extraGapFraction > SPARSE_GAP_FRACTION;
+
+        if (lineIsSparse) {
+          const nChars = [...lineContent].filter(
+            (c) => c !== ZERO_WIDTH_SPACE
+          ).length;
+          if (nChars > 0) {
+            const neededPx = (TARGET_FILL - fillRatio) * colW;
+            const deltaPercent = (neededPx * 100) / (nChars * fontSize);
+            const newPercent = Math.min(globalPercent + deltaPercent, perLineMax);
+            // Skip if the achievable expansion is negligible or the line is so
+            // sparse that even the maximum delta won't visibly help.
+            if (newPercent - globalPercent >= 0.5) {
+              sparseCandidates.push({ start: lineStart, end: nextStart, newPercent });
+            }
+          }
+        }
+      }
+
+      lineStart = nextStart;
+    }
+
+    if (sparseCandidates.length === 0) return false;
+
+    let changed = false;
+    for (const { start, end, newPercent } of sparseCandidates) {
+      node.setRangeLetterSpacing(start, end, {
+        unit: globalTracking.unit,
+        value: convertPercentSpacingToNodeUnit(newPercent, node, globalTracking.unit)
+      });
+      changed = true;
+    }
+
+    return changed;
+  } finally {
+    heightProbe.remove();
+    widthProbe.remove();
+  }
+}
+
 function fitsWithinWidth(text, maxWidth, measureWidth) {
   return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
+}
+
+// When look-back re-queues a token sequence, orphan prepositions may end up
+// at line-end because the anti-orphan guard in processOneParagraph fires with
+// a different line context than the original pass.  Scan the array and join any
+// [orphan_word, spaces, cyrillic_word] triplet with NBSP so the pair is treated
+// as a single token on re-processing.
+function preJoinOrphansInQueue(arr) {
+  const out = [];
+  let i = 0;
+  while (i < arr.length) {
+    const t = arr[i];
+    if (!SPACE_TOKEN_REGEX.test(t)) {
+      const cyr = t.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
+      if (ORPHAN_WORDS.has(cyr)) {
+        let j = i + 1;
+        while (j < arr.length && SPACE_TOKEN_REGEX.test(arr[j])) j++;
+        if (j < arr.length && /^[А-ЯЁа-яё0-9«"(„]/.test(arr[j])) {
+          out.push(t + NBSP + arr[j]);
+          i = j + 1;
+          continue;
+        }
+      }
+    }
+    out.push(t);
+    i++;
+  }
+  return out;
+}
+
+// Returns all valid hyphenation offsets within token (chars from token start),
+// ordered from longest-left to shortest-left. No width filtering — caller verifies.
+function getAllBreakOffsetsInToken(token, options) {
+  const minWordLength = options?.minWordLengthForHyphenation ?? 4;
+  const minBefore = options?.minLettersBeforeHyphen ?? 2;
+  const minAfter = options?.minLettersAfterHyphen ?? 3;
+  const forbidden = options?.forbiddenBreaks instanceof Set ? options.forbiddenBreaks : null;
+
+  const match = token.match(RUSSIAN_TOKEN_REGEX);
+  if (!match) return [];
+  const leading = match[1];
+  const core = match[2];
+  if (core.length < minWordLength) return [];
+
+  const parts = hypher.hyphenate(core);
+  if (!parts || parts.length <= 1) return [];
+
+  const offsets = [];
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const leftCore = parts.slice(0, i).join("");
+    const rightCore = parts.slice(i).join("");
+    if (leftCore.length < minBefore || rightCore.length < minAfter) continue;
+    if (forbidden && forbidden.has(`${core}:${leftCore}`)) continue;
+    offsets.push(leading.length + leftCore.length);
+  }
+  return offsets;
 }
 
 function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
@@ -599,6 +1043,11 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
   let consecutiveHyphenLines = 0;
   let lineWordCount = 0;
   let lastWordInfo = null;
+  let secondToLastWordInfo = null;
+  let thirdToLastWordInfo = null;
+  let prevLineLastWordInfo = null;
+  let prevLineSecondToLastWordInfo = null;
+  let prevLineWasNatural = false;
   let unsolvedSparseLines = 0;
 
   const processingQueue = Array.from(tokens);
@@ -622,10 +1071,67 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
 
     while (chunk.length > 0) {
       if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
+        // Widow word fixup: when a short word is the first word on a new line after
+        // a natural wrap, try hyphenating the second-to-last word of the previous
+        // line so that its tail + the last word + this word land together.
+        if (linePrefix === "" && prevLineWasNatural && prevLineSecondToLastWordInfo !== null) {
+          const widowConsecLimitReached = maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
+          if (!widowConsecLimitReached) {
+            const cyrillicChars = chunk.replace(/[^А-ЯЁа-яё]/g, "");
+            if (cyrillicChars.length > 0 && cyrillicChars.length <= WIDOW_WORD_THRESHOLD) {
+              const Y = prevLineSecondToLastWordInfo;
+              const Z = prevLineLastWordInfo;
+              if (Z !== null) {
+                const remainingForY = maxWidth - measureWidth(Y.currentLineBefore + Y.spacesBeforeWord);
+                if (remainingForY > 0) {
+                  const yBreak = findBestBreakInToken(Y.token, remainingForY, measureWidth, options);
+                  if (yBreak) {
+                    const combinedWidth = measureWidth(
+                      yBreak.right + Z.spacesBeforeWord + Z.token + spacesForWord + chunk
+                    );
+                    if (combinedWidth <= maxWidth + WIDTH_EPSILON) {
+                      result = result.slice(0, Y.resultLenBeforeSpaces);
+                      result += Y.spacesBeforeWord + yBreak.left + INSERTED_BREAK_MARKER;
+                      insertedBreaks += 1;
+                      consecutiveHyphenLines += 1;
+                      const pushBack = preJoinOrphansInQueue([
+                        yBreak.right,
+                        ...(Z.spacesBeforeWord ? [Z.spacesBeforeWord] : []),
+                        Z.token,
+                        ...(spacesForWord ? [spacesForWord] : []),
+                        chunk,
+                      ]);
+                      processingQueue.splice(qIdx, 0, ...pushBack);
+                      prevLineLastWordInfo = null;
+                      prevLineSecondToLastWordInfo = null;
+                      prevLineWasNatural = false;
+                      currentLine = "";
+                      linePrefix = "";
+                      lineWordCount = 0;
+                      lastWordInfo = null;
+                      secondToLastWordInfo = null;
+                      thirdToLastWordInfo = null;
+                      pendingSpaces = "";
+                      chunk = "";
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (linePrefix === "") {
+          prevLineLastWordInfo = null;
+          prevLineSecondToLastWordInfo = null;
+          prevLineWasNatural = false;
+        }
         result += chunk;
         currentLine = `${linePrefix}${chunk}`;
         chunk = "";
         lineWordCount++;
+        thirdToLastWordInfo = secondToLastWordInfo;
+        secondToLastWordInfo = lastWordInfo;
         const prevLastWordInfo = lastWordInfo;
         lastWordInfo = {
           token,
@@ -642,12 +1148,16 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
             if (pi < processingQueue.length) {
               const nextTok = processingQueue[pi];
               const interSp = processingQueue.slice(qIdx, pi).join("");
-              const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9]/.test(nextTok);
+              const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9«"(„]/.test(nextTok);
               if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth)) {
                 result = result.slice(0, resultLenBeforeSpaces);
                 currentLine = currentLineBeforeSpaces;
                 lineWordCount = Math.max(0, lineWordCount - 1);
                 lastWordInfo = prevLastWordInfo;
+                // The shift that happened when the rolled-back word was placed:
+                // third→second→last. Reverse it: second = what was third before.
+                secondToLastWordInfo = thirdToLastWordInfo;
+                thirdToLastWordInfo = null;
                 processingQueue.splice(qIdx, pi - qIdx + 1);
                 processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
                 if (spacesForWord.length > 0) {
@@ -668,17 +1178,27 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
 
       if (linePrefix.length > 0) {
         const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
-        const isLineSparse =
-          lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+        // Per-gap metric: extra justified space per inter-word gap as fraction of
+        // line width. A line with 4 short words at 80% fill has (1-0.8)/3 = 6.7%
+        // extra per gap — visually worse than 6 words at 70% fill (6% per gap).
+        const extraGapFraction = lineWordCount > 1
+          ? (1 - lineFillRatio) / (lineWordCount - 1)
+          : 0;
+        const isLineSparse = lineFillRatio > 0.1 && (
+          lineFillRatio < SPARSE_LINE_FILL_THRESHOLD ||
+          extraGapFraction > SPARSE_GAP_FRACTION
+        );
 
-        const canBreak = (!reachedParagraphLimit || isLineSparse) && !reachedConsecutiveLimit;
+        // Sparse lines override the consecutive-hyphen limit.
+        const canBreak = (!reachedParagraphLimit || isLineSparse) &&
+          (!reachedConsecutiveLimit || isLineSparse);
 
         let breakPoint = null;
         if (canBreak) {
           breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
         }
 
-        if (!breakPoint && isLineSparse && !reachedConsecutiveLimit) {
+        if (!breakPoint && isLineSparse) {
           breakPoint = findBestBreakInToken(chunk, remainingWidth, measureWidth, {
             ...options,
             minLettersBeforeHyphen: 1,
@@ -695,16 +1215,19 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
           linePrefix = "";
           lineWordCount = 0;
           lastWordInfo = null;
+          secondToLastWordInfo = null;
+          thirdToLastWordInfo = null;
+          prevLineLastWordInfo = null;
+          prevLineSecondToLastWordInfo = null;
+          prevLineWasNatural = false;
           continue;
         }
 
-        if (isLineSparse) {
-          unsolvedSparseLines += 1;
-        }
-
-        // Look-back: line has 2 whole words (or 3 words on a sparse line) and
-        // no syllable of the current token fits in the remaining space.
-        if ((lineWordCount === 2 || (lineWordCount === 3 && isLineSparse)) && lastWordInfo !== null && !reachedConsecutiveLimit) {
+        // Look-back: line has 2–5 whole words and no syllable of the current token
+        // fits in the remaining space. Cascade: last → second-to-last → third-to-last.
+        const lbWordCount = lineWordCount === 2 ||
+          (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse);
+        if (lbWordCount && lastWordInfo !== null && (!reachedConsecutiveLimit || isLineSparse)) {
           const lw = lastWordInfo;
           const remainingForLw =
             maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
@@ -716,24 +1239,111 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
             result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
             insertedBreaks += 1;
             consecutiveHyphenLines += 1;
-            if (spacesForWord.length > 0) {
-              processingQueue.splice(qIdx, 0, lbBreak.right, spacesForWord, token);
-            } else {
-              processingQueue.splice(qIdx, 0, lbBreak.right, token);
+            {
+              const raw = [lbBreak.right, ...(spacesForWord.length > 0 ? [spacesForWord] : []), token];
+              processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(raw));
             }
             currentLine = "";
             linePrefix = "";
             lineWordCount = 0;
             lastWordInfo = null;
+            secondToLastWordInfo = null;
+            thirdToLastWordInfo = null;
+            prevLineLastWordInfo = null;
+            prevLineSecondToLastWordInfo = null;
+            prevLineWasNatural = false;
             chunk = "";
             break;
           }
+
+          // Last word can't be broken — try second-to-last.
+          if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse &&
+              secondToLastWordInfo !== null) {
+            const slw = secondToLastWordInfo;
+            const remainingForSlw =
+              maxWidth - measureWidth(slw.currentLineBefore + slw.spacesBeforeWord);
+            const slwBreak = findBestBreakInToken(
+              slw.token, remainingForSlw, measureWidth, options
+            );
+            if (slwBreak) {
+              result = result.slice(0, slw.resultLenBeforeSpaces);
+              result += slw.spacesBeforeWord + slwBreak.left + INSERTED_BREAK_MARKER;
+              insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
+              const rawPushBack2 = [
+                slwBreak.right,
+                ...(lw.spacesBeforeWord ? [lw.spacesBeforeWord] : []),
+                lw.token,
+                ...(spacesForWord.length > 0 ? [spacesForWord] : []),
+                token,
+              ];
+              processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack2));
+              currentLine = "";
+              linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
+              secondToLastWordInfo = null;
+              thirdToLastWordInfo = null;
+              prevLineLastWordInfo = null;
+              prevLineSecondToLastWordInfo = null;
+              prevLineWasNatural = false;
+              chunk = "";
+              break;
+            }
+          }
+
+          // Second-to-last also can't be broken — try third-to-last.
+          if (lineWordCount >= 3 && lineWordCount <= 5 && isLineSparse && thirdToLastWordInfo !== null) {
+            const tlw = thirdToLastWordInfo;
+            const slw = secondToLastWordInfo;
+            const remainingForTlw =
+              maxWidth - measureWidth(tlw.currentLineBefore + tlw.spacesBeforeWord);
+            const tlwBreak = findBestBreakInToken(
+              tlw.token, remainingForTlw, measureWidth, options
+            );
+            if (tlwBreak) {
+              result = result.slice(0, tlw.resultLenBeforeSpaces);
+              result += tlw.spacesBeforeWord + tlwBreak.left + INSERTED_BREAK_MARKER;
+              insertedBreaks += 1;
+              consecutiveHyphenLines += 1;
+              const rawPushBack3 = [
+                tlwBreak.right,
+                ...(slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : []),
+                ...(slw ? [slw.token] : []),
+                ...(lw.spacesBeforeWord ? [lw.spacesBeforeWord] : []),
+                lw.token,
+                ...(spacesForWord.length > 0 ? [spacesForWord] : []),
+                token,
+              ];
+              processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack3));
+              currentLine = "";
+              linePrefix = "";
+              lineWordCount = 0;
+              lastWordInfo = null;
+              secondToLastWordInfo = null;
+              thirdToLastWordInfo = null;
+              prevLineLastWordInfo = null;
+              prevLineSecondToLastWordInfo = null;
+              prevLineWasNatural = false;
+              chunk = "";
+              break;
+            }
+          }
         }
 
+        // All break attempts (direct + look-back cascade) failed — truly unsolved.
+        if (isLineSparse) {
+          unsolvedSparseLines += 1;
+        }
+        prevLineLastWordInfo = lastWordInfo;
+        prevLineSecondToLastWordInfo = secondToLastWordInfo;
+        prevLineWasNatural = true;
         consecutiveHyphenLines = 0;
         linePrefix = "";
         lineWordCount = 0;
         lastWordInfo = null;
+        secondToLastWordInfo = null;
+        thirdToLastWordInfo = null;
         continue;
       }
 
@@ -742,6 +1352,7 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
         currentLine = chunk;
         chunk = "";
         lineWordCount++;
+        secondToLastWordInfo = lastWordInfo;
         lastWordInfo = {
           token,
           resultLenBeforeSpaces,
@@ -764,6 +1375,11 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
         linePrefix = "";
         lineWordCount = 0;
         lastWordInfo = null;
+        secondToLastWordInfo = null;
+        thirdToLastWordInfo = null;
+        prevLineLastWordInfo = null;
+        prevLineSecondToLastWordInfo = null;
+        prevLineWasNatural = false;
         continue;
       }
 
@@ -772,6 +1388,8 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
       currentLine = chunk;
       chunk = "";
       lineWordCount++;
+      thirdToLastWordInfo = secondToLastWordInfo;
+      secondToLastWordInfo = lastWordInfo;
       lastWordInfo = {
         token,
         resultLenBeforeSpaces,
@@ -784,7 +1402,57 @@ function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphe
   }
 
   result += pendingSpaces;
-  return { text: result, breakCount: insertedBreaks, unsolvedSparseLines };
+
+  // TeX-style post-pass: the last line of a paragraph never triggers an overflow,
+  // so look-back never fires for it.  After the greedy loop, check whether the last
+  // line is sparse and proactively break its last (or second-to-last) word.
+  const postLoopConsecLimit = maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
+  if (lastWordInfo !== null && lineWordCount >= 2 && !postLoopConsecLimit) {
+    const lastLineFill = maxWidth > 0 ? measureWidth(currentLine) / maxWidth : 1;
+    const lastExtraGap = lineWordCount > 1
+      ? (1 - lastLineFill) / (lineWordCount - 1)
+      : 0;
+    const lastLineSparse = lastLineFill > 0.1 && (
+      lastLineFill < SPARSE_LINE_FILL_THRESHOLD || lastExtraGap > SPARSE_GAP_FRACTION
+    );
+    if (lastLineSparse) {
+      const lw = lastWordInfo;
+      const remainingForLw =
+        maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
+      const postBreak = findBestBreakInToken(lw.token, remainingForLw, measureWidth, options);
+      if (postBreak) {
+        result = result.slice(0, lw.resultLenBeforeSpaces);
+        result += lw.spacesBeforeWord + postBreak.left + INSERTED_BREAK_MARKER + postBreak.right;
+        insertedBreaks += 1;
+      } else if (secondToLastWordInfo !== null) {
+        const slw = secondToLastWordInfo;
+        const remainingForSlw =
+          maxWidth - measureWidth(slw.currentLineBefore + slw.spacesBeforeWord);
+        const slwBreak = findBestBreakInToken(slw.token, remainingForSlw, measureWidth, options);
+        if (slwBreak) {
+          result = result.slice(0, slw.resultLenBeforeSpaces);
+          result += slw.spacesBeforeWord + slwBreak.left + INSERTED_BREAK_MARKER;
+          result += lw.spacesBeforeWord + lw.token;
+          insertedBreaks += 1;
+        }
+      }
+    }
+  }
+
+  // Count widow words: a short first word on a non-first, non-last simulated line
+  const simLines = simulateParagraphLines(result, maxWidth, measureWidth);
+  let widowWordLines = 0;
+  for (let i = 1; i < simLines.length - 1; i++) {
+    const lineTokens = simLines[i].match(TOKEN_REGEX) || [];
+    const firstContent = lineTokens.find(t => !SPACE_TOKEN_REGEX.test(t));
+    if (!firstContent) continue;
+    const cyrillicLen = firstContent.replace(/[^А-ЯЁа-яё]/g, "").length;
+    if (cyrillicLen > 0 && cyrillicLen <= WIDOW_WORD_THRESHOLD) {
+      const contentCount = lineTokens.filter(t => !SPACE_TOKEN_REGEX.test(t)).length;
+      if (contentCount >= 2) widowWordLines++;
+    }
+  }
+  return { text: result, breakCount: insertedBreaks, unsolvedSparseLines, widowWordLines };
 }
 
 function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
@@ -801,6 +1469,7 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
 
   let totalBreakCount = 0;
   let totalUnsolvedSparseLines = 0;
+  let totalWidowWordLines = 0;
   const transformedParagraphs = [];
 
   for (const line of paragraphs) {
@@ -815,13 +1484,15 @@ function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, optio
 
     totalBreakCount += paraResult.breakCount;
     totalUnsolvedSparseLines += paraResult.unsolvedSparseLines;
+    totalWidowWordLines += paraResult.widowWordLines;
     transformedParagraphs.push(paraResult.text);
   }
 
   return {
     text: transformedParagraphs.join("\n"),
     breakCount: totalBreakCount,
-    unsolvedSparseLines: totalUnsolvedSparseLines
+    unsolvedSparseLines: totalUnsolvedSparseLines,
+    widowWordLines: totalWidowWordLines
   };
 }
 
@@ -858,7 +1529,8 @@ function restoreFromSnapshot(node) {
 
   if (
     snapshot.letterSpacing &&
-    !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node))
+    (node.letterSpacing === figma.mixed ||
+      !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node)))
   ) {
     node.letterSpacing = snapshot.letterSpacing;
     changed = true;
@@ -952,11 +1624,14 @@ function getLetterSpacingCandidates(node, settings) {
 }
 
 function hasMixedTypography(node) {
+  // letterSpacing is intentionally excluded: we apply setRangeLetterSpacing
+  // ourselves, which makes it figma.mixed on subsequent Apply calls.
+  // Detecting font/size/lineHeight/case/decoration mixed is enough to decide
+  // whether uniform tracking optimization is safe.
   const props = [
     node.fontName,
     node.fontSize,
     node.lineHeight,
-    node.letterSpacing,
     node.textCase,
     node.textDecoration
   ];
@@ -1258,6 +1933,8 @@ async function processTextNodes(textNodes, mode, settings) {
 
       let transformed = original;
       let hasNodeChanges = false;
+      let mixedTypography = false;
+      let nodeSettings = settings;
 
       if (isResetMode) {
         if (restoreFromSnapshot(node)) {
@@ -1266,15 +1943,11 @@ async function processTextNodes(textNodes, mode, settings) {
         }
         transformed = resetHyphenationText(original);
       } else {
-        const mixedTypography = hasMixedTypography(node);
+        mixedTypography = hasMixedTypography(node);
         // Per-node settings: auto-tighten hyphenation and letter-spacing range
         // for narrow columns based on block width and font size.
-        const nodeSettings = deriveSettingsForNode(node, settings);
+        nodeSettings = deriveSettingsForNode(node, settings);
 
-        // Orphan prevention (preventOrphans) is handled inline inside
-        // hyphenateRussianTextWithVisibleDash via options.preventOrphans —
-        // NBSP is only inserted at actual line boundaries, not everywhere,
-        // so justified text keeps the maximum number of stretchable spaces.
         let preparedText = settings.autoNbsp
           ? applyNonBreakingSpaces(cleanOriginal)
           : cleanOriginal;
@@ -1287,7 +1960,7 @@ async function processTextNodes(textNodes, mode, settings) {
           let bestText = preparedText;
           let bestSpacing = originalLetterSpacing;
           let bestBreakCount = Number.POSITIVE_INFINITY;
-          let bestSparseCount = Number.POSITIVE_INFINITY;
+          let bestEffectiveSparse = Number.POSITIVE_INFINITY;
           let bestDesiredPenalty = Number.POSITIVE_INFINITY;
           let bestCurrentPenalty = Number.POSITIVE_INFINITY;
 
@@ -1303,6 +1976,7 @@ async function processTextNodes(textNodes, mode, settings) {
               );
               const breakCount = hyphenResult.breakCount;
               const sparseCount = hyphenResult.unsolvedSparseLines;
+              const widowCount = hyphenResult.widowWordLines;
               const desiredPenalty = Math.abs(
                 candidate.percentValue - nodeSettings.letterSpacingDesiredPercent
               );
@@ -1310,17 +1984,29 @@ async function processTextNodes(textNodes, mode, settings) {
                 candidate.percentValue - currentSpacingPercent
               );
 
+              // Compression below the desired value carries a fractional cost so
+              // the optimizer doesn't aggressively over-compress to eliminate a
+              // marginal sparse line.  Each 1 % below desired counts as 0.3 of an
+              // additional sparse line (i.e. 4 % compression ≈ 1.2 extra sparse).
+              // Each widow word (short first word on a line) also counts as 0.5
+              // sparse lines, so the optimizer avoids creating widows when choosing tracking.
+              const compressionPenalty = Math.max(
+                0,
+                nodeSettings.letterSpacingDesiredPercent - candidate.percentValue
+              ) * 0.3;
+              const effectiveSparse = sparseCount + compressionPenalty + widowCount * 0.5;
+
               const isBetter =
-                sparseCount < bestSparseCount ||
-                (sparseCount === bestSparseCount && breakCount < bestBreakCount) ||
-                (sparseCount === bestSparseCount && breakCount === bestBreakCount &&
+                effectiveSparse < bestEffectiveSparse - 0.0001 ||
+                (Math.abs(effectiveSparse - bestEffectiveSparse) < 0.0001 && breakCount < bestBreakCount) ||
+                (Math.abs(effectiveSparse - bestEffectiveSparse) < 0.0001 && breakCount === bestBreakCount &&
                   desiredPenalty < bestDesiredPenalty) ||
-                (sparseCount === bestSparseCount && breakCount === bestBreakCount &&
+                (Math.abs(effectiveSparse - bestEffectiveSparse) < 0.0001 && breakCount === bestBreakCount &&
                   Math.abs(desiredPenalty - bestDesiredPenalty) < 0.0001 &&
                   currentPenalty < bestCurrentPenalty);
 
               if (isBetter) {
-                bestSparseCount = sparseCount;
+                bestEffectiveSparse = effectiveSparse;
                 bestBreakCount = breakCount;
                 bestDesiredPenalty = desiredPenalty;
                 bestCurrentPenalty = currentPenalty;
@@ -1358,7 +2044,25 @@ async function processTextNodes(textNodes, mode, settings) {
       if (transformed !== original) {
         node.characters = transformed;
         removeSpuriousHyphens(node);
+        if (settings.preventOrphans) {
+          fixOrphansAfterCleanup(node);
+        }
         hasNodeChanges = true;
+      }
+
+      if (!isResetMode && !mixedTypography) {
+        if (addHyphensForSparseLines(node, nodeSettings)) {
+          hasNodeChanges = true;
+        }
+      }
+
+      if (!isResetMode && settings.optimizeLetterSpacing && !mixedTypography) {
+        if (optimizeSparseLineTracking(node, nodeSettings)) {
+          // Tracking changes shift line breaks — re-verify hyphens are still at
+          // line ends and remove any that ended up mid-line.
+          removeSpuriousHyphens(node);
+          hasNodeChanges = true;
+        }
       }
 
       if (hasNodeChanges) {
