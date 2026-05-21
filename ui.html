@@ -10,7 +10,7 @@
     @font-face { font-family: "Roboto";  font-weight: 400; src: local("Roboto"), local("Roboto Regular"), local("Roboto-Regular"); }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 360px; overflow: hidden; background-color: #152d23; -webkit-font-smoothing: antialiased; }
+    html, body { width: 360px; overflow: hidden; background-color: #162E23; -webkit-font-smoothing: antialiased; }
 
     /* ── Root container ── */
     .UI {
@@ -652,7 +652,10 @@
     };
   }
 
-  applyBtn.addEventListener('click', function() { send('apply'); });
+  applyBtn.addEventListener('click', function() {
+    send('save-settings', { settings: collectSettings() });
+    send('apply');
+  });
   resetBtn.addEventListener('click', function() { send('reset'); });
   document.getElementById('donate-btn').addEventListener('click', function() {
     send('open-external', { url: 'https://app.lava.top/legraphic?tabId=donate' });
