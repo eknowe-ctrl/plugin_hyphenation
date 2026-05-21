@@ -12,15 +12,15 @@
     @font-face { font-family: "Roboto";  font-weight: 400; src: local("Roboto"), local("Roboto Regular"), local("Roboto-Regular"); }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 360px; overflow: hidden; background-color: #0F425F; -webkit-font-smoothing: antialiased; }
+    html, body { width: 270px; overflow: hidden; background-color: #0F425F; -webkit-font-smoothing: antialiased; }
 
     .UI {
-      width: 360px;
+      width: 270px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 21px;
-      padding: 20px 10px;
+      gap: 16px;
+      padding: 15px 7.5px;
       background-color: #0F425F;
       transform-origin: top left;
     }
@@ -32,13 +32,13 @@
       align-items: center;
       justify-content: center;
     }
-    .hero-svg svg { width: 100%; height: auto; }
+    .hero-svg svg { width: 254.39px; height: 48.66px; }
 
     /* ── Cards column ── */
     .cards-col {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4.5px;
       align-self: stretch;
       width: 100%;
     }
@@ -48,21 +48,21 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 30px;
-      padding: 20px 9px 14px;
+      gap: 22.5px;
+      padding: 15px 6.75px 10.5px;
       align-self: stretch;
       width: 100%;
       background-color: #175376;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 9px;
+      border: 0.75px solid rgba(255,255,255,0.10);
     }
     .card-title {
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 400;
       color: #ffffff;
-      font-size: 20px;
-      letter-spacing: 0.6px;
-      line-height: 26px;
+      font-size: 15px;
+      letter-spacing: 0.45px;
+      line-height: 19.5px;
     }
 
     /* ── Inline row (label + control side by side) ── */
@@ -83,28 +83,28 @@
     .row-label {
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 300;
-      font-size: 14px;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
+      font-size: 10.5px;
+      letter-spacing: 0.32px;
+      line-height: 13.65px;
       color: #ffffff;
       flex: 1;
-      padding-right: 8px;
+      padding-right: 6px;
     }
 
     /* ── Number inputs (inline, right side) ── */
     .num-inline {
-      width: 105px;
-      height: 35px;
-      padding: 2px 10px;
+      width: 158.25px;
+      height: 26.25px;
+      padding: 0 10px;
       background-color: #0F425F;
       border: none;
-      border-radius: 10px;
+      border-radius: 7.5px;
       color: #ffffff;
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 400;
-      font-size: 24px;
+      font-size: 18px;
       text-align: center;
-      letter-spacing: 0.72px;
+      letter-spacing: 0.54px;
       outline: none;
       flex-shrink: 0;
       -moz-appearance: textfield;
@@ -112,21 +112,21 @@
     }
     .num-inline::-webkit-inner-spin-button,
     .num-inline::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .num-inline:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
+    .num-inline:focus { box-shadow: 0 0 0 1px #ff6f00; }
 
     /* ── Dropdown ── */
     .field-select {
-      width: 105px;
-      height: 35px;
-      padding: 0 28px 0 10px;
+      width: 158.25px;
+      height: 26.25px;
+      padding: 0 22px 0 12px;
       background-color: #0F425F;
       border: none;
-      border-radius: 10px;
+      border-radius: 7.5px;
       color: #ffffff;
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 400;
-      font-size: 13px;
-      letter-spacing: 0.39px;
+      font-size: 10.5px;
+      letter-spacing: 0.32px;
       outline: none;
       flex-shrink: 0;
       appearance: none;
@@ -137,13 +137,13 @@
       background-position: right 9px center;
     }
     .field-select option { background-color: #0F425F; color: white; }
-    .field-select:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
+    .field-select:focus { box-shadow: 0 0 0 1px #ff6f00; }
 
     /* ── 3-column grid (Трекинг) ── */
     .grid-3 {
       display: flex;
-      align-items: center;
-      gap: 11px;
+      align-items: flex-start;
+      gap: 8.25px;
       align-self: stretch;
     }
     .field-col {
@@ -151,47 +151,47 @@
       flex-direction: column;
       flex: 1;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
     .col-label {
       align-self: stretch;
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 300;
       color: #ffffff;
-      font-size: 14px;
+      font-size: 10.5px;
       text-align: center;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
+      letter-spacing: 0.32px;
+      line-height: 13.65px;
     }
     .num-input {
       width: 100%;
-      height: 35px;
-      padding: 2px 6px;
+      height: 26.25px;
+      padding: 0 4px;
       background-color: #0F425F;
       border: none;
-      border-radius: 10px;
+      border-radius: 7.5px;
       color: #ffffff;
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 400;
-      font-size: 24px;
+      font-size: 18px;
       text-align: center;
-      letter-spacing: 0.72px;
+      letter-spacing: 0.54px;
       outline: none;
       -moz-appearance: textfield;
       appearance: textfield;
     }
     .num-input::-webkit-inner-spin-button,
     .num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .num-input:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
+    .num-input:focus { box-shadow: 0 0 0 1px #ff6f00; }
 
     /* ── Параметры collapsible ── */
     .card-params {
       gap: 0;
-      padding-bottom: 20px;
+      padding-bottom: 15px;
     }
     .card-params.expanded {
-      gap: 30px;
-      padding-bottom: 14px;
+      gap: 22.5px;
+      padding-bottom: 10.5px;
     }
     .card-header {
       display: flex;
@@ -218,7 +218,7 @@
       display: none;
       flex-direction: column;
       align-items: flex-start;
-      gap: 21px;
+      gap: 15.75px;
       align-self: stretch;
       width: 100%;
     }
@@ -234,10 +234,10 @@
     /* ── Rectangular switch ── */
     .switch {
       position: relative;
-      width: 48px;
-      height: 20px;
+      width: 36px;
+      height: 15px;
       background-color: #0F425F;
-      border-radius: 4px;
+      border-radius: 3px;
       overflow: hidden;
       flex-shrink: 0;
       cursor: pointer;
@@ -245,17 +245,17 @@
     .switch input { display: none; }
     .switch .knob {
       position: absolute;
-      top: calc(50% - 6px);
-      left: 5px;
-      width: 16px;
-      height: 12px;
+      top: 3px;
+      left: 4px;
+      width: 12px;
+      height: 9px;
       background-color: #2278A9;
-      border-radius: 2px;
+      border-radius: 1.5px;
       transition: left 0.18s, background-color 0.18s;
       pointer-events: none;
     }
     .switch input:checked + .knob {
-      left: 28px;
+      left: 21px;
       background-color: #ff6f00;
     }
 
@@ -264,14 +264,14 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 15px;
+      gap: 11.25px;
       align-self: stretch;
       width: 100%;
     }
     .btn-group {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4.5px;
       align-self: stretch;
       width: 100%;
     }
@@ -280,19 +280,19 @@
       box-sizing: border-box;
       background-color: #ff6f00;
       display: flex;
-      height: 45px;
+      height: 33.75px;
       align-items: center;
       justify-content: center;
-      padding: 0 9px;
+      padding: 0 6.75px;
       align-self: stretch;
       width: 100%;
-      border-radius: 12px;
+      border-radius: 9px;
       cursor: pointer;
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
-      font-size: 20px;
+      font-size: 15px;
       text-align: center;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.45px;
       color: #ffffff;
       white-space: nowrap;
       transition: background-color 0.15s;
@@ -306,19 +306,19 @@
       box-sizing: border-box;
       background-color: #175376;
       display: flex;
-      height: 45px;
+      height: 33.75px;
       align-items: center;
       justify-content: center;
-      padding: 0 9px;
+      padding: 0 6.75px;
       align-self: stretch;
       width: 100%;
-      border-radius: 12px;
+      border-radius: 9px;
       cursor: pointer;
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
-      font-size: 20px;
+      font-size: 15px;
       text-align: center;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.45px;
       color: #ffffff;
       white-space: nowrap;
       transition: background-color 0.15s;
@@ -329,23 +329,23 @@
     /* ── Status ── */
     .status {
       display: flex;
-      min-height: 67px;
+      min-height: 50.25px;
       align-items: center;
       justify-content: center;
-      padding: 14px 9px;
+      padding: 10.5px 6.75px;
       align-self: stretch;
       width: 100%;
       background-color: #0B364E;
-      border-radius: 12px;
+      border-radius: 9px;
     }
     .status-text {
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 500;
       color: #2175A4;
-      font-size: 14px;
+      font-size: 10.5px;
       text-align: center;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
+      letter-spacing: 0.32px;
+      line-height: 13.65px;
     }
     .status.success .status-text { color: #4BB87A; }
     .status.error   .status-text { color: #ff6f00; }
@@ -360,9 +360,9 @@
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
       color: #2175A4;
-      font-size: 14px;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
+      font-size: 10.5px;
+      letter-spacing: 0.32px;
+      line-height: 13.65px;
       white-space: nowrap;
     }
     .footer-donate {
@@ -370,7 +370,7 @@
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4.5px;
       transition: opacity 0.15s;
     }
     .footer-donate:hover { opacity: 0.75; }
@@ -378,9 +378,9 @@
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
       color: #2175A4;
-      font-size: 14px;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
+      font-size: 10.5px;
+      letter-spacing: 0.32px;
+      line-height: 13.65px;
       text-decoration: underline;
       white-space: nowrap;
     }
@@ -391,7 +391,7 @@
 
   <!-- Hero SVG -->
   <div class="hero-svg">
-    <svg width="340" height="69" viewBox="0 0 340 69" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="254.39" height="48.66" viewBox="0 0 340 69" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path fill-rule="evenodd" clip-rule="evenodd" d="M44.2168 56.1201C45.006 56.1201 45.6837 56.3198 46.249 56.7197C46.8142 57.1196 47.2463 57.6638 47.5449 58.3516C47.8489 59.0395 48.001 59.8133 48.001 60.6719C48.001 61.5359 47.8489 62.312 47.5449 63C47.241 63.6878 46.8039 64.2344 46.2334 64.6396C45.6627 65.0396 44.9743 65.2402 44.1689 65.2402C43.3744 65.2402 42.7026 65.0396 42.1533 64.6396C41.8935 64.448 41.665 64.2237 41.4648 63.9688V68.8398H40.2812V56.3604H41.3369V57.5518C41.5695 57.2224 41.8459 56.9418 42.1689 56.7119C42.7235 56.3173 43.4063 56.1202 44.2168 56.1201ZM44.0254 57.2158C43.4228 57.2158 42.9215 57.363 42.5215 57.6562C42.1268 57.9496 41.8301 58.3572 41.6328 58.8799C41.4355 59.3972 41.3369 59.9946 41.3369 60.6719C41.3369 61.3385 41.4355 61.9359 41.6328 62.4639C41.8301 62.9865 42.1293 63.3976 42.5293 63.6963C42.9292 63.9948 43.4358 64.1435 44.0488 64.1436C44.6513 64.1436 45.1528 63.9922 45.5527 63.6885C45.9527 63.3845 46.2519 62.9708 46.4492 62.4482C46.6519 61.9202 46.7529 61.3279 46.7529 60.6719C46.7529 60.0213 46.6543 59.4347 46.457 58.9121C46.2597 58.3894 45.9581 57.9759 45.5527 57.6719C45.1528 57.3681 44.6438 57.2159 44.0254 57.2158Z" fill="white"/>
 <path fill-rule="evenodd" clip-rule="evenodd" d="M116.524 56.1201C117.314 56.1201 117.991 56.3198 118.557 56.7197C119.122 57.1196 119.554 57.6638 119.853 58.3516C120.157 59.0395 120.309 59.8133 120.309 60.6719C120.309 61.5359 120.157 62.312 119.853 63C119.549 63.6878 119.111 64.2344 118.541 64.6396C117.97 65.0396 117.282 65.2402 116.477 65.2402C115.682 65.2402 115.01 65.0396 114.461 64.6396C114.201 64.4481 113.972 64.2244 113.772 63.9697V68.8398H112.589V56.3604H113.645V57.5518C113.877 57.2224 114.154 56.9418 114.477 56.7119C115.031 56.3173 115.714 56.1202 116.524 56.1201ZM116.333 57.2158C115.73 57.2158 115.229 57.363 114.829 57.6562C114.434 57.9496 114.138 58.3572 113.94 58.8799C113.743 59.3972 113.645 59.9946 113.645 60.6719C113.645 61.3385 113.743 61.9359 113.94 62.4639C114.138 62.9865 114.437 63.3976 114.837 63.6963C115.237 63.9948 115.743 64.1435 116.356 64.1436C116.959 64.1436 117.46 63.9923 117.86 63.6885C118.26 63.3845 118.56 62.9708 118.757 62.4482C118.96 61.9202 119.061 61.3279 119.061 60.6719C119.061 60.0213 118.962 59.4347 118.765 58.9121C118.567 58.3894 118.266 57.9759 117.86 57.6719C117.46 57.3681 116.951 57.2159 116.333 57.2158Z" fill="white"/>
 <path fill-rule="evenodd" clip-rule="evenodd" d="M194.581 56.1201C195.37 56.1201 196.048 56.3199 196.613 56.7197C197.178 57.1196 197.611 57.6638 197.909 58.3516C198.213 59.0395 198.365 59.8133 198.365 60.6719C198.365 61.5359 198.213 62.312 197.909 63C197.605 63.6878 197.168 64.2344 196.598 64.6396C196.027 65.0396 195.339 65.2402 194.533 65.2402C193.739 65.2402 193.067 65.0396 192.518 64.6396C192.258 64.448 192.029 64.2237 191.829 63.9688V68.8398H190.646V56.3604H191.701V57.5518C191.934 57.2224 192.21 56.9418 192.533 56.7119C193.088 56.3173 193.771 56.1202 194.581 56.1201ZM194.39 57.2158C193.787 57.2158 193.286 57.3629 192.886 57.6562C192.491 57.9496 192.194 58.3572 191.997 58.8799C191.8 59.3972 191.701 59.9946 191.701 60.6719C191.701 61.3384 191.8 61.9359 191.997 62.4639C192.194 62.9865 192.494 63.3976 192.894 63.6963C193.293 63.9948 193.8 64.1435 194.413 64.1436C195.016 64.1436 195.518 63.9925 195.918 63.6885C196.318 63.3845 196.616 62.9708 196.813 62.4482C197.016 61.9202 197.117 61.3279 197.117 60.6719C197.117 60.0213 197.019 59.4347 196.821 58.9121C196.624 58.3895 196.323 57.9759 195.918 57.6719C195.518 57.3679 195.008 57.2158 194.39 57.2158Z" fill="white"/>
@@ -556,8 +556,8 @@
     resize();
   });
 
-  var BASE_W       = 360;
-  var BASE_MAX_H   = 1100;
+  var BASE_W       = 270;
+  var BASE_MAX_H   = 850;
   var BASE_MIN_H   = 300;
   var FIGMA_CHROME_H = 160;
 
