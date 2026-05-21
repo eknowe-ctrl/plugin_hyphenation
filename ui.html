@@ -640,14 +640,12 @@
     Object.keys(toggleFields).forEach(function(k) {
       toggleFields[k].checked = !!s[k];
     });
-    var minBefore = typeof s.minLettersBeforeHyphen === 'number' ? s.minLettersBeforeHyphen : 2;
-    if (minBefore >= 3) hyphenModeEl.value = 'soft';
-    else if (minBefore <= 1) hyphenModeEl.value = 'aggressive';
-    else hyphenModeEl.value = 'normal';
+    var intensity = s.hyphenationIntensity;
+    hyphenModeEl.value = (intensity === 'soft' || intensity === 'aggressive') ? intensity : 'normal';
 
     var nf = numFields;
     if (typeof s.minWordLengthForHyphenation === 'number') nf.minWordLengthForHyphenation.value = s.minWordLengthForHyphenation;
-    if (typeof s.maxConsecutiveHyphens       === 'number') nf.maxConsecutiveHyphens.value       = s.maxConsecutiveHyphens;
+    if (typeof s.maxHyphensPerParagraph      === 'number') nf.maxConsecutiveHyphens.value       = s.maxHyphensPerParagraph;
     if (typeof s.letterSpacingMinPercent     === 'number') nf.letterSpacingMinPercent.value     = s.letterSpacingMinPercent;
     if (typeof s.letterSpacingDesiredPercent === 'number') nf.letterSpacingDesiredPercent.value = s.letterSpacingDesiredPercent;
     if (typeof s.letterSpacingMaxPercent     === 'number') nf.letterSpacingMaxPercent.value     = s.letterSpacingMaxPercent;
@@ -656,21 +654,13 @@
   }
 
   function collectSettings() {
-    var mode = hyphenModeEl.value;
-    var minBefore, minAfter;
-    if (mode === 'soft')            { minBefore = 3; minAfter = 4; }
-    else if (mode === 'aggressive') { minBefore = 1; minAfter = 2; }
-    else                            { minBefore = 2; minAfter = 3; }
-
     return {
       autoWatch:             toggleFields.autoWatch.checked,
       preventOrphans:        toggleFields.preventOrphans.checked,
-      autoNbsp:              true,
       optimizeLetterSpacing: toggleFields.optimizeLetterSpacing.checked,
+      hyphenationIntensity:  hyphenModeEl.value,
       minWordLengthForHyphenation: Number(numFields.minWordLengthForHyphenation.value) || 5,
-      minLettersBeforeHyphen:      minBefore,
-      minLettersAfterHyphen:       minAfter,
-      maxConsecutiveHyphens:       Number(numFields.maxConsecutiveHyphens.value) || 5,
+      maxHyphensPerParagraph:      Number(numFields.maxConsecutiveHyphens.value) || 5,
       letterSpacingMinPercent:     Number(numFields.letterSpacingMinPercent.value)     || -3,
       letterSpacingDesiredPercent: Number(numFields.letterSpacingDesiredPercent.value) || 0,
       letterSpacingMaxPercent:     Number(numFields.letterSpacingMaxPercent.value)     || 2,
