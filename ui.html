@@ -10,17 +10,16 @@
     @font-face { font-family: "Roboto";  font-weight: 400; src: local("Roboto"), local("Roboto Regular"), local("Roboto-Regular"); }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 360px; overflow: hidden; background-color: #162E23; -webkit-font-smoothing: antialiased; }
+    html, body { width: 360px; overflow: hidden; background-color: #0F425F; -webkit-font-smoothing: antialiased; }
 
-    /* ── Root container ── */
     .UI {
       width: 360px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 33px;
+      gap: 21px;
       padding: 20px 10px;
-      background-color: #152d23;
+      background-color: #0F425F;
       transform-origin: top left;
     }
 
@@ -51,9 +50,9 @@
       padding: 20px 9px 14px;
       align-self: stretch;
       width: 100%;
-      background-color: #1f3c2f;
+      background-color: #175376;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.10);
     }
     .card-title {
       font-family: "Manrope", Helvetica, sans-serif;
@@ -62,70 +61,40 @@
       font-size: 20px;
       letter-spacing: 0.6px;
       line-height: 26px;
-      white-space: nowrap;
     }
 
-    /* ── 3-column grid ── */
-    .grid-3 {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      align-self: stretch;
-    }
-    .field-col {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      align-items: center;
-      gap: 16px;
-    }
-    #card-tracking .field-col {
-      align-items: flex-start;
-    }
-    .col-label {
-      align-self: stretch;
-      font-family: "Manrope", Helvetica, sans-serif;
-      font-weight: 300;
-      color: #ffffff;
-      font-size: 14px;
-      text-align: center;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
-    }
-    .num-input {
-      width: 100px;
-      height: 35px;
-      padding: 2px 10px;
-      background-color: #152d23;
-      border: none;
-      border-radius: 10px;
-      color: #ffffff;
-      font-family: "Manrope", Helvetica, sans-serif;
-      font-weight: 400;
-      font-size: 24px;
-      text-align: center;
-      letter-spacing: 0.72px;
-      outline: none;
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    .num-input::-webkit-inner-spin-button,
-    .num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .num-input:focus { box-shadow: 0 0 0 1.5px #ff6e00; }
-
-    /* ── Inline row (label + number input side by side) ── */
+    /* ── Inline row (label + control side by side) ── */
     .inline-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      align-self: stretch;
+      width: 100%;
+    }
+    .inline-row-center {
       display: flex;
       align-items: center;
       justify-content: space-between;
       align-self: stretch;
       width: 100%;
     }
+    .row-label {
+      font-family: "Manrope", Helvetica, sans-serif;
+      font-weight: 300;
+      font-size: 14px;
+      letter-spacing: 0.42px;
+      line-height: 18.2px;
+      color: #ffffff;
+      flex: 1;
+      padding-right: 8px;
+    }
+
+    /* ── Number inputs (inline, right side) ── */
     .num-inline {
-      width: 100px;
+      width: 105px;
       height: 35px;
       padding: 2px 10px;
-      background-color: #152d23;
+      background-color: #0F425F;
       border: none;
       border-radius: 10px;
       color: #ffffff;
@@ -141,58 +110,84 @@
     }
     .num-inline::-webkit-inner-spin-button,
     .num-inline::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .num-inline:focus { box-shadow: 0 0 0 1.5px #ff6e00; }
+    .num-inline:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
 
-    /* ── Параметры collapsible card ── */
-    .card-params {
-      padding: 20px 9px;
-      gap: 0;
-    }
-    .card-params.expanded {
-      gap: 30px;
-      padding-bottom: 14px;
-    }
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      align-self: stretch;
-      width: 100%;
-      cursor: pointer;
-      user-select: none;
-    }
-    .chevron {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 16px;
-      height: 16px;
+    /* ── Dropdown ── */
+    .field-select {
+      width: 105px;
+      height: 35px;
+      padding: 0 28px 0 10px;
+      background-color: #0F425F;
+      border: none;
+      border-radius: 10px;
+      color: #ffffff;
+      font-family: "Manrope", Helvetica, sans-serif;
+      font-weight: 400;
+      font-size: 13px;
+      letter-spacing: 0.39px;
+      outline: none;
       flex-shrink: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='12' viewBox='0 0 7 12'%3E%3Cpath d='M1 1l5 5-5 5' stroke='white' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
     }
-    .chevron svg {
-      transition: transform 0.2s ease;
-    }
-    .card-params.expanded .chevron svg {
-      transform: rotate(90deg);
-    }
+    .field-select option { background-color: #0F425F; color: white; }
+    .field-select:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
 
-    /* ── Toggle list (inside Параметры) ── */
+    /* ── 3-column grid (Трекинг) ── */
+    .grid-3 {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      align-self: stretch;
+    }
+    .field-col {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      align-items: center;
+      gap: 16px;
+    }
+    .col-label {
+      align-self: stretch;
+      font-family: "Manrope", Helvetica, sans-serif;
+      font-weight: 300;
+      color: #ffffff;
+      font-size: 14px;
+      text-align: center;
+      letter-spacing: 0.42px;
+      line-height: 18.2px;
+    }
+    .num-input {
+      width: 100%;
+      height: 35px;
+      padding: 2px 6px;
+      background-color: #0F425F;
+      border: none;
+      border-radius: 10px;
+      color: #ffffff;
+      font-family: "Manrope", Helvetica, sans-serif;
+      font-weight: 400;
+      font-size: 24px;
+      text-align: center;
+      letter-spacing: 0.72px;
+      outline: none;
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    .num-input::-webkit-inner-spin-button,
+    .num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .num-input:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
+
+    /* ── Toggle list ── */
     .toggle-list {
-      display: none;
+      display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 21px;
-      align-self: stretch;
-      width: 100%;
-    }
-    .card-params.expanded .toggle-list {
-      display: flex;
-    }
-    .toggle-item {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 10px;
       align-self: stretch;
       width: 100%;
     }
@@ -203,28 +198,13 @@
       align-self: stretch;
       width: 100%;
     }
-    .row-label {
-      font-family: "Manrope", Helvetica, sans-serif;
-      font-weight: 300;
-      font-size: 14px;
-      letter-spacing: 0.42px;
-      line-height: 18.2px;
-      color: #ffffff;
-      white-space: nowrap;
-    }
-    .divider {
-      align-self: stretch;
-      height: 1px;
-      margin-bottom: -0.5px;
-      background-color: rgba(255,255,255,0.12);
-    }
 
     /* ── Rectangular switch ── */
     .switch {
       position: relative;
       width: 48px;
       height: 20px;
-      background-color: #152d23;
+      background-color: #0F425F;
       border-radius: 4px;
       overflow: hidden;
       flex-shrink: 0;
@@ -234,17 +214,17 @@
     .switch .knob {
       position: absolute;
       top: calc(50% - 6px);
-      left: 4px;
+      left: 5px;
       width: 16px;
       height: 12px;
-      background-color: #32604b;
+      background-color: #2278A9;
       border-radius: 2px;
       transition: left 0.18s, background-color 0.18s;
       pointer-events: none;
     }
     .switch input:checked + .knob {
       left: 28px;
-      background-color: #ff6e00;
+      background-color: #ff6f00;
     }
 
     /* ── Actions ── */
@@ -266,7 +246,7 @@
     .btn-apply {
       all: unset;
       box-sizing: border-box;
-      background-color: #ff6e00;
+      background-color: #ff6f00;
       display: flex;
       height: 45px;
       align-items: center;
@@ -292,7 +272,7 @@
     .btn-reset {
       all: unset;
       box-sizing: border-box;
-      background-color: #203d30;
+      background-color: #175376;
       display: flex;
       height: 45px;
       align-items: center;
@@ -311,32 +291,32 @@
       white-space: nowrap;
       transition: background-color 0.15s;
     }
-    .btn-reset:hover:not(:disabled) { background-color: #2a5040; }
+    .btn-reset:hover:not(:disabled) { background-color: #1e6a96; }
     .btn-reset:disabled { opacity: 0.4; cursor: default; }
 
     /* ── Status ── */
     .status {
       display: flex;
-      height: 67px;
+      min-height: 67px;
       align-items: center;
       justify-content: center;
       padding: 14px 9px;
       align-self: stretch;
       width: 100%;
-      background-color: #11231b;
+      background-color: #0B364E;
       border-radius: 12px;
     }
     .status-text {
       font-family: "Manrope", Helvetica, sans-serif;
       font-weight: 500;
-      color: #87af9d;
+      color: #2175A4;
       font-size: 14px;
       text-align: center;
       letter-spacing: 0.42px;
       line-height: 18.2px;
     }
     .status.success .status-text { color: #4BB87A; }
-    .status.error   .status-text { color: #ff6e00; }
+    .status.error   .status-text { color: #ff6f00; }
 
     /* ── Footer ── */
     .footer {
@@ -347,7 +327,7 @@
       width: 100%;
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
-      color: #3b785d;
+      color: #2175A4;
       font-size: 14px;
       letter-spacing: 0.42px;
       line-height: 18.2px;
@@ -365,7 +345,7 @@
     .footer-donate-text {
       font-family: "Roboto", Helvetica, sans-serif;
       font-weight: 400;
-      color: #3b785d;
+      color: #2175A4;
       font-size: 14px;
       letter-spacing: 0.42px;
       line-height: 18.2px;
@@ -437,26 +417,27 @@
   <!-- Cards -->
   <div class="cards-col">
 
-    <!-- Переносы + Минимальная длина слова -->
+    <!-- Переносы -->
     <div class="card">
       <div class="card-title">Переносы</div>
-      <div class="grid-3">
-        <div class="field-col">
-          <span class="col-label">После первой</span>
-          <input type="number" class="num-input" id="minBefore" min="1" max="5" step="1" />
-        </div>
-        <div class="field-col">
-          <span class="col-label">До последней</span>
-          <input type="number" class="num-input" id="minAfter" min="1" max="5" step="1" />
-        </div>
-        <div class="field-col">
-          <span class="col-label">Подряд макс.</span>
-          <input type="number" class="num-input" id="maxConsec" min="0" max="5" step="1" />
-        </div>
+
+      <div class="inline-row">
+        <span class="row-label">Режим переноса</span>
+        <select class="field-select" id="hyphenMode">
+          <option value="normal">Нормальный</option>
+          <option value="soft">Мягкий</option>
+          <option value="aggressive">Плотный</option>
+        </select>
       </div>
+
       <div class="inline-row">
         <span class="row-label">Минимальная длина слова</span>
         <input type="number" class="num-inline" id="minWordLen" min="4" max="12" step="1" />
+      </div>
+
+      <div class="inline-row">
+        <span class="row-label">Макс. переносов на абзац</span>
+        <input type="number" class="num-inline" id="maxConsec" min="0" max="10" step="1" />
       </div>
     </div>
 
@@ -477,52 +458,28 @@
           <input type="number" class="num-input" id="lsMax" step="0.5" />
         </div>
       </div>
+      <div class="inline-row-center">
+        <span class="row-label">Шаг</span>
+        <input type="number" class="num-inline" id="lsStep" min="0.1" max="2" step="0.1" />
+      </div>
     </div>
 
-    <!-- Параметры (collapsible) -->
-    <div class="card card-params" id="params-card">
-      <div class="card-header" id="params-toggle">
-        <span class="card-title">Параметры</span>
-        <div class="chevron">
-          <svg width="7" height="12" viewBox="0 0 7 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M1 1L6 6L1 11" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+    <!-- Параметры -->
+    <div class="card">
+      <div class="card-title">Параметры</div>
+      <div class="toggle-list">
+        <div class="toggle-row">
+          <span class="row-label">Автопересчёт по ширине</span>
+          <label class="switch"><input type="checkbox" id="autoWatch" /><div class="knob"></div></label>
         </div>
-      </div>
-
-      <div class="toggle-list" id="params-list">
-
-        <div class="toggle-item">
-          <div class="toggle-row">
-            <span class="row-label">Автопересчёт по ширине</span>
-            <label class="switch"><input type="checkbox" id="autoWatch" /><div class="knob"></div></label>
-          </div>
-          <div class="divider"></div>
+        <div class="toggle-row">
+          <span class="row-label">Анти-висячие предлоги</span>
+          <label class="switch"><input type="checkbox" id="preventOrphans" /><div class="knob"></div></label>
         </div>
-
-        <div class="toggle-item">
-          <div class="toggle-row">
-            <span class="row-label">Анти-висячие предлоги</span>
-            <label class="switch"><input type="checkbox" id="preventOrphans" /><div class="knob"></div></label>
-          </div>
-          <div class="divider"></div>
+        <div class="toggle-row">
+          <span class="row-label">Оптимизировать трекинг</span>
+          <label class="switch"><input type="checkbox" id="optimizeLetterSpacing" /><div class="knob"></div></label>
         </div>
-
-        <div class="toggle-item">
-          <div class="toggle-row">
-            <span class="row-label">Неразрывные пробелы</span>
-            <label class="switch"><input type="checkbox" id="autoNbsp" /><div class="knob"></div></label>
-          </div>
-          <div class="divider"></div>
-        </div>
-
-        <div class="toggle-item">
-          <div class="toggle-row">
-            <span class="row-label">Оптимизировать трекинг</span>
-            <label class="switch"><input type="checkbox" id="optimizeLetterSpacing" /><div class="knob"></div></label>
-          </div>
-        </div>
-
       </div>
     </div>
 
@@ -533,9 +490,9 @@
     <div class="btn-group">
       <button class="btn-apply" id="apply-btn">Применить переносы</button>
       <button class="btn-reset" id="reset-btn">Сбросить переносы</button>
-    </div>
-    <div class="status" id="status" aria-live="polite">
-      <span class="status-text">Выделите текст и выберите действие.</span>
+      <div class="status" id="status" aria-live="polite">
+        <span class="status-text">Выделите текст и выберите действие.</span>
+      </div>
     </div>
     <div class="footer">
       <span>by Eugeny Leshchenko</span>
@@ -548,15 +505,14 @@
 
 </div>
 <script>
-  var applyBtn  = document.getElementById('apply-btn');
-  var resetBtn  = document.getElementById('reset-btn');
-  var statusEl  = document.getElementById('status');
-  var paramsCard   = document.getElementById('params-card');
-  var paramsToggle = document.getElementById('params-toggle');
+  var applyBtn     = document.getElementById('apply-btn');
+  var resetBtn     = document.getElementById('reset-btn');
+  var statusEl     = document.getElementById('status');
+  var hyphenModeEl = document.getElementById('hyphenMode');
 
-  var BASE_W = 360;
-  var BASE_MAX_H = 1012;
-  var BASE_MIN_H = 300;
+  var BASE_W       = 360;
+  var BASE_MAX_H   = 1100;
+  var BASE_MIN_H   = 300;
   var FIGMA_CHROME_H = 160;
 
   function send(type, extra) {
@@ -598,26 +554,18 @@
     resetBtn.disabled = on;
   }
 
-  // Параметры collapse/expand
-  paramsToggle.addEventListener('click', function() {
-    var expanded = paramsCard.classList.toggle('expanded');
-    resize();
-  });
-
   var toggleFields = {
     autoWatch:             document.getElementById('autoWatch'),
     preventOrphans:        document.getElementById('preventOrphans'),
-    autoNbsp:              document.getElementById('autoNbsp'),
     optimizeLetterSpacing: document.getElementById('optimizeLetterSpacing')
   };
   var numFields = {
     minWordLengthForHyphenation: document.getElementById('minWordLen'),
-    minLettersBeforeHyphen:      document.getElementById('minBefore'),
-    minLettersAfterHyphen:       document.getElementById('minAfter'),
     maxConsecutiveHyphens:       document.getElementById('maxConsec'),
     letterSpacingMinPercent:     document.getElementById('lsMin'),
     letterSpacingDesiredPercent: document.getElementById('lsDesired'),
-    letterSpacingMaxPercent:     document.getElementById('lsMax')
+    letterSpacingMaxPercent:     document.getElementById('lsMax'),
+    letterSpacingStepPercent:    document.getElementById('lsStep')
   };
 
   function renderSettings(s) {
@@ -625,30 +573,41 @@
     Object.keys(toggleFields).forEach(function(k) {
       toggleFields[k].checked = !!s[k];
     });
+    var minBefore = typeof s.minLettersBeforeHyphen === 'number' ? s.minLettersBeforeHyphen : 2;
+    if (minBefore >= 3) hyphenModeEl.value = 'soft';
+    else if (minBefore <= 1) hyphenModeEl.value = 'aggressive';
+    else hyphenModeEl.value = 'normal';
+
     var nf = numFields;
     if (typeof s.minWordLengthForHyphenation === 'number') nf.minWordLengthForHyphenation.value = s.minWordLengthForHyphenation;
-    if (typeof s.minLettersBeforeHyphen      === 'number') nf.minLettersBeforeHyphen.value      = s.minLettersBeforeHyphen;
-    if (typeof s.minLettersAfterHyphen       === 'number') nf.minLettersAfterHyphen.value       = s.minLettersAfterHyphen;
     if (typeof s.maxConsecutiveHyphens       === 'number') nf.maxConsecutiveHyphens.value       = s.maxConsecutiveHyphens;
     if (typeof s.letterSpacingMinPercent     === 'number') nf.letterSpacingMinPercent.value     = s.letterSpacingMinPercent;
     if (typeof s.letterSpacingDesiredPercent === 'number') nf.letterSpacingDesiredPercent.value = s.letterSpacingDesiredPercent;
     if (typeof s.letterSpacingMaxPercent     === 'number') nf.letterSpacingMaxPercent.value     = s.letterSpacingMaxPercent;
+    if (typeof s.letterSpacingStepPercent    === 'number') nf.letterSpacingStepPercent.value    = s.letterSpacingStepPercent;
+    else nf.letterSpacingStepPercent.value = 0.5;
   }
 
   function collectSettings() {
+    var mode = hyphenModeEl.value;
+    var minBefore, minAfter;
+    if (mode === 'soft')            { minBefore = 3; minAfter = 4; }
+    else if (mode === 'aggressive') { minBefore = 1; minAfter = 2; }
+    else                            { minBefore = 2; minAfter = 3; }
+
     return {
       autoWatch:             toggleFields.autoWatch.checked,
       preventOrphans:        toggleFields.preventOrphans.checked,
-      autoNbsp:              toggleFields.autoNbsp.checked,
+      autoNbsp:              true,
       optimizeLetterSpacing: toggleFields.optimizeLetterSpacing.checked,
       minWordLengthForHyphenation: Number(numFields.minWordLengthForHyphenation.value) || 5,
-      minLettersBeforeHyphen:      Number(numFields.minLettersBeforeHyphen.value)      || 2,
-      minLettersAfterHyphen:       Number(numFields.minLettersAfterHyphen.value)       || 3,
-      maxConsecutiveHyphens:       Number(numFields.maxConsecutiveHyphens.value)       || 2,
+      minLettersBeforeHyphen:      minBefore,
+      minLettersAfterHyphen:       minAfter,
+      maxConsecutiveHyphens:       Number(numFields.maxConsecutiveHyphens.value) || 5,
       letterSpacingMinPercent:     Number(numFields.letterSpacingMinPercent.value)     || -3,
       letterSpacingDesiredPercent: Number(numFields.letterSpacingDesiredPercent.value) || 0,
       letterSpacingMaxPercent:     Number(numFields.letterSpacingMaxPercent.value)     || 2,
-      letterSpacingStepPercent:    0.5
+      letterSpacingStepPercent:    Number(numFields.letterSpacingStepPercent.value)    || 0.5
     };
   }
 
@@ -661,7 +620,9 @@
     send('open-external', { url: 'https://app.lava.top/legraphic?tabId=donate' });
   });
 
-  Object.values(toggleFields).concat(Object.values(numFields)).forEach(function(el) {
+  var allFields = Object.values(toggleFields).concat(Object.values(numFields));
+  allFields.push(hyphenModeEl);
+  allFields.forEach(function(el) {
     el.addEventListener('change', function() {
       send('save-settings', { settings: collectSettings() });
     });
