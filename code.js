@@ -174,24 +174,69 @@
   var ZERO_WIDTH_SPACE = "\u200B";
   var INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
   var hypher = new Hypher(russianPatterns);
-  var TOKEN_REGEX = /(\n|[^\S\n ]+|(?:[^\s]| )+)/g;
-  var SPACE_TOKEN_REGEX = /^[^\S\n ]+$/;
+  var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
+  var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
   var RUSSIAN_TOKEN_REGEX = /^([^А-ЯЁа-яё-]*)([А-ЯЁа-яё]+)([^А-ЯЁа-яё-]*)$/;
+  var HYPHENATION_INTENSITY_ORDER = {
+    soft: 0,
+    normal: 1,
+    aggressive: 2
+  };
   var WIDTH_EPSILON = 0.01;
   var SPARSE_LINE_FILL_THRESHOLD = 0.75;
-  var SPARSE_GAP_FRACTION = 0.03;
-  var WIDOW_WORD_THRESHOLD = 8;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
   var SELF_CHANGE_SUPPRESS_MS = 600;
-  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV6";
+  var SETTINGS_STORAGE_KEY = "hyphenationSettingsV4";
   var SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
+  var CUSTOM_PRESET = "custom";
   var UI_WINDOW_WIDTH = 360;
-  var UI_INITIAL_HEIGHT = 766;
-  var UI_MIN_HEIGHT = 300;
-  var UI_MAX_HEIGHT = 1012;
+  var UI_INITIAL_HEIGHT = 760;
+  var UI_MIN_HEIGHT = 620;
+  var UI_MAX_HEIGHT = 1100;
+  var TYPOGRAPHY_PRESETS = {
+    interface: {
+      autoWatch: true,
+      preventOrphans: true,
+      hangingHyphen: true,
+      optimizeLetterSpacing: true,
+      minWordLengthForHyphenation: 4,
+      hyphenationIntensity: "normal",
+      maxHyphensPerParagraph: 0,
+      letterSpacingMinPercent: -3,
+      letterSpacingDesiredPercent: 0,
+      letterSpacingMaxPercent: 3,
+      letterSpacingStepPercent: 0.5
+    },
+    book: {
+      autoWatch: true,
+      preventOrphans: true,
+      hangingHyphen: false,
+      optimizeLetterSpacing: true,
+      minWordLengthForHyphenation: 5,
+      hyphenationIntensity: "soft",
+      maxHyphensPerParagraph: 2,
+      letterSpacingMinPercent: -1,
+      letterSpacingDesiredPercent: 0,
+      letterSpacingMaxPercent: 1,
+      letterSpacingStepPercent: 0.5
+    },
+    dense: {
+      autoWatch: true,
+      preventOrphans: true,
+      hangingHyphen: true,
+      optimizeLetterSpacing: true,
+      minWordLengthForHyphenation: 4,
+      hyphenationIntensity: "aggressive",
+      maxHyphensPerParagraph: 0,
+      letterSpacingMinPercent: -4,
+      letterSpacingDesiredPercent: -1,
+      letterSpacingMaxPercent: 2,
+      letterSpacingStepPercent: 0.5
+    }
+  };
   var ORPHAN_WORDS = /* @__PURE__ */ new Set([
     "\u0432",
     "\u0441",
@@ -226,20 +271,9 @@
     "\u0431\u0435\u0437",
     "\u0438\u043B\u0438"
   ]);
-  var DEFAULT_SETTINGS = {
-    autoWatch: true,
-    preventOrphans: true,
-    autoNbsp: true,
-    optimizeLetterSpacing: true,
-    minWordLengthForHyphenation: 5,
-    minLettersBeforeHyphen: 2,
-    minLettersAfterHyphen: 3,
-    maxConsecutiveHyphens: 2,
-    letterSpacingMinPercent: -1,
-    letterSpacingDesiredPercent: 0,
-    letterSpacingMaxPercent: 8,
-    letterSpacingStepPercent: 0.5
-  };
+  var DEFAULT_SETTINGS = __spreadValues({
+    preset: "interface"
+  }, TYPOGRAPHY_PRESETS.interface);
   var watchedNodeIds = /* @__PURE__ */ new Set();
   var watchedNodeWidths = /* @__PURE__ */ new Map();
   var autoRecalcTimer = null;
@@ -247,12 +281,21 @@
   var autoRecalcQueued = false;
   var suppressDocumentChangeUntil = 0;
   var manualActionInProgress = false;
-  var runtimeSettings = Object.assign({}, DEFAULT_SETTINGS);
+  var runtimeSettings = __spreadValues({}, DEFAULT_SETTINGS);
   function clampNumber(value, minValue, maxValue) {
     if (Number.isNaN(value)) {
       return minValue;
     }
     return Math.max(minValue, Math.min(maxValue, value));
+  }
+  function normalizePresetName(value) {
+    if (typeof value !== "string") {
+      return CUSTOM_PRESET;
+    }
+    if (value in TYPOGRAPHY_PRESETS || value === CUSTOM_PRESET) {
+      return value;
+    }
+    return CUSTOM_PRESET;
   }
   function normalizeUiHeight(value) {
     const parsed = Number(value);
@@ -262,48 +305,51 @@
     return Math.round(clampNumber(parsed, UI_MIN_HEIGHT, UI_MAX_HEIGHT));
   }
   function normalizeSettings(input) {
-    const src = input && typeof input === "object" ? input : {};
-    const autoWatch = typeof src.autoWatch === "boolean" ? src.autoWatch : DEFAULT_SETTINGS.autoWatch;
-    const preventOrphans = typeof src.preventOrphans === "boolean" ? src.preventOrphans : DEFAULT_SETTINGS.preventOrphans;
-    const autoNbsp = typeof src.autoNbsp === "boolean" ? src.autoNbsp : DEFAULT_SETTINGS.autoNbsp;
-    const optimizeLetterSpacing = typeof src.optimizeLetterSpacing === "boolean" ? src.optimizeLetterSpacing : DEFAULT_SETTINGS.optimizeLetterSpacing;
+    var _a, _b, _c, _d, _e, _f, _g;
+    const source = input && typeof input === "object" ? input : {};
+    const preset = normalizePresetName(source.preset || DEFAULT_SETTINGS.preset);
+    const fallbackProfile = preset in TYPOGRAPHY_PRESETS ? TYPOGRAPHY_PRESETS[preset] : TYPOGRAPHY_PRESETS[DEFAULT_SETTINGS.preset];
+    const autoWatch = typeof source.autoWatch === "boolean" ? source.autoWatch : fallbackProfile.autoWatch;
+    const preventOrphans = typeof source.preventOrphans === "boolean" ? source.preventOrphans : fallbackProfile.preventOrphans;
+    const hangingHyphen = typeof source.hangingHyphen === "boolean" ? source.hangingHyphen : fallbackProfile.hangingHyphen;
+    const optimizeLetterSpacing = typeof source.optimizeLetterSpacing === "boolean" ? source.optimizeLetterSpacing : fallbackProfile.optimizeLetterSpacing;
     const minWordLengthForHyphenation = clampNumber(
-      Number(src.minWordLengthForHyphenation != null ? src.minWordLengthForHyphenation : DEFAULT_SETTINGS.minWordLengthForHyphenation),
+      Number(
+        (_a = source.minWordLengthForHyphenation) != null ? _a : fallbackProfile.minWordLengthForHyphenation
+      ),
       4,
       12
     );
-    const minLettersBeforeHyphen = clampNumber(
-      Number(src.minLettersBeforeHyphen != null ? src.minLettersBeforeHyphen : DEFAULT_SETTINGS.minLettersBeforeHyphen),
-      1,
-      5
+    const hyphenationIntensityRaw = String(
+      (_b = source.hyphenationIntensity) != null ? _b : fallbackProfile.hyphenationIntensity
     );
-    const minLettersAfterHyphen = clampNumber(
-      Number(src.minLettersAfterHyphen != null ? src.minLettersAfterHyphen : DEFAULT_SETTINGS.minLettersAfterHyphen),
-      1,
-      5
-    );
-    const maxConsecutiveHyphens = clampNumber(
-      Number(src.maxConsecutiveHyphens != null ? src.maxConsecutiveHyphens : DEFAULT_SETTINGS.maxConsecutiveHyphens),
+    const hyphenationIntensity = hyphenationIntensityRaw === "soft" || hyphenationIntensityRaw === "normal" || hyphenationIntensityRaw === "aggressive" ? hyphenationIntensityRaw : fallbackProfile.hyphenationIntensity;
+    const maxHyphensPerParagraph = clampNumber(
+      Number(
+        (_c = source.maxHyphensPerParagraph) != null ? _c : fallbackProfile.maxHyphensPerParagraph
+      ),
       0,
-      5
+      20
     );
     const minPercent = clampNumber(
-      Number(src.letterSpacingMinPercent != null ? src.letterSpacingMinPercent : DEFAULT_SETTINGS.letterSpacingMinPercent),
+      Number((_d = source.letterSpacingMinPercent) != null ? _d : fallbackProfile.letterSpacingMinPercent),
       -10,
       10
     );
     const desiredPercent = clampNumber(
-      Number(src.letterSpacingDesiredPercent != null ? src.letterSpacingDesiredPercent : DEFAULT_SETTINGS.letterSpacingDesiredPercent),
+      Number(
+        (_e = source.letterSpacingDesiredPercent) != null ? _e : fallbackProfile.letterSpacingDesiredPercent
+      ),
       -10,
       10
     );
     const maxPercent = clampNumber(
-      Number(src.letterSpacingMaxPercent != null ? src.letterSpacingMaxPercent : DEFAULT_SETTINGS.letterSpacingMaxPercent),
+      Number((_f = source.letterSpacingMaxPercent) != null ? _f : fallbackProfile.letterSpacingMaxPercent),
       -10,
       10
     );
     const stepPercent = clampNumber(
-      Number(src.letterSpacingStepPercent != null ? src.letterSpacingStepPercent : DEFAULT_SETTINGS.letterSpacingStepPercent),
+      Number((_g = source.letterSpacingStepPercent) != null ? _g : fallbackProfile.letterSpacingStepPercent),
       0.1,
       5
     );
@@ -311,36 +357,28 @@
     const sortedMax = Math.max(minPercent, maxPercent);
     const sortedDesired = clampNumber(desiredPercent, sortedMin, sortedMax);
     return {
+      preset,
       autoWatch,
       preventOrphans,
-      autoNbsp,
+      hangingHyphen,
       optimizeLetterSpacing,
       minWordLengthForHyphenation,
-      minLettersBeforeHyphen,
-      minLettersAfterHyphen,
-      maxConsecutiveHyphens,
+      hyphenationIntensity,
+      maxHyphensPerParagraph,
       letterSpacingMinPercent: sortedMin,
       letterSpacingDesiredPercent: sortedDesired,
       letterSpacingMaxPercent: sortedMax,
       letterSpacingStepPercent: stepPercent
     };
   }
-  function deriveSettingsForNode(node, baseSettings) {
-    const fontSize = typeof node.fontSize === "number" && node.fontSize > 0 ? node.fontSize : 16;
-    const charsPerLine = node.width / (fontSize * 0.55);
-    if (charsPerLine >= 45) {
-      return baseSettings;
+  function getPresetSettings(presetName) {
+    const name = normalizePresetName(presetName);
+    if (!(name in TYPOGRAPHY_PRESETS)) {
+      return null;
     }
-    const s = Object.assign({}, baseSettings);
-    if (charsPerLine < 30) {
-      s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
-      s.minLettersBeforeHyphen = Math.min(s.minLettersBeforeHyphen, 2);
-      s.minLettersAfterHyphen = Math.min(s.minLettersAfterHyphen, 2);
-    } else {
-      s.minWordLengthForHyphenation = Math.min(s.minWordLengthForHyphenation, 5);
-      s.minLettersAfterHyphen = Math.min(s.minLettersAfterHyphen, 3);
-    }
-    return s;
+    return normalizeSettings(__spreadValues({
+      preset: name
+    }, TYPOGRAPHY_PRESETS[name]));
   }
   function loadRuntimeSettings() {
     return __async(this, null, function* () {
@@ -369,24 +407,27 @@
   function normalizeTextForRehyphenation(text) {
     return text.replace(/\u00AD/g, "").replace(/-\u200B/g, "").replace(/\u200B/g, "");
   }
-  function normalizeToCleanText(text) {
-    return normalizeTextForRehyphenation(text).replace(/\u00A0/g, " ");
-  }
   function resetHyphenationText(text) {
-    return normalizeToCleanText(text);
+    return normalizeTextForRehyphenation(text).replace(
+      /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})\u00A0(?=[А-Яа-яЁё0-9])/g,
+      (match, prefix, word) => {
+        if (!ORPHAN_WORDS.has(word.toLowerCase())) {
+          return match;
+        }
+        return `${prefix}${word} `;
+      }
+    );
   }
-  var NBSP_UNITS_RE = new RegExp(
-    "(\\d+(?:[,.]\\d+)?)[^\\S\\n]+(\u043C\u043B\u0440\u0434|\u043C\u043B\u043D|\u0442\u044B\u0441|\u043C\u043A\u0433|\u043C\u0433|\u043A\u0433|\u043C\u043A\u043C|\u043D\u043C|\u043F\u043C|\u043A\u043C|\u0434\u043C|\u0441\u043C|\u043C\u043C|\u043C\u043B|\u0434\u043B|\u043A\u043B|\u0433\u0430|\u0422\u0413\u0446|\u0413\u0413\u0446|\u041C\u0413\u0446|\u043A\u0413\u0446|\u0413\u0446|\u041C\u0412\u0442|\u043A\u0412\u0442|\u043C\u0412\u0442|\u0412\u0442|\u041C\u0412|\u043A\u0412|\u043C\u0412|\u0412|\u043C\u043A\u0410|\u043C\u0410|\u0410|\u041C\u041E\u043C|\u043A\u041E\u043C|\u041E\u043C|\u041C\u0414\u0436|\u043A\u0414\u0436|\u0414\u0436|\u043A\u043A\u0430\u043B|\u043A\u0430\u043B|\u0413\u041F\u0430|\u041C\u041F\u0430|\u043A\u041F\u0430|\u041F\u0430|\u0430\u0442\u043C|\u0431\u0430\u0440|\u043C\u043A\u0441|\u043D\u0441|\u043C\u0441|\u043C\u0438\u043D|\u0440\u0443\u0431|\u043A\u043E\u043F|\u0448\u0442|\u0435\u0434|\u044D\u043A\u0437|\u0433|\u043C|\u043B|\u0410|\u0447)\\b",
-    "g"
-  );
-  var NBSP_PERCENT_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+([%₽€$])/g;
-  var NBSP_TEMP_RE = /(\d+(?:[,.]\d+)?)[^\S\n]+(°[CFK]?)/g;
-  var NBSP_MONTHS_RE = /(\d{1,2})[^\S\n]+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\b/gi;
-  var NBSP_YEAR_RE = /(\d+)[^\S\n]+(году?|год(?:а|ов)?|лет)\b/g;
-  var NBSP_INITIALS_RE = /([А-ЯЁA-Z])\.[^\S\n]+(?=[А-ЯЁA-Za-яёа-я])/g;
-  var NBSP_ADDR_RE = /\b(проф|акад|доц|тов|ул|пр|пл|пос|им|кв|оз|г|д|р|о|с)\.[^\S\n]+(?=[А-ЯЁ0-9])/gi;
-  function applyNonBreakingSpaces(text) {
-    return text.replace(NBSP_MONTHS_RE, `$1\xA0$2`).replace(NBSP_YEAR_RE, `$1\xA0$2`).replace(NBSP_PERCENT_RE, `$1\xA0$2`).replace(NBSP_TEMP_RE, `$1\xA0$2`).replace(NBSP_UNITS_RE, `$1\xA0$2`).replace(NBSP_INITIALS_RE, `$1.\xA0`).replace(NBSP_ADDR_RE, `$1.\xA0`);
+  function preventRussianOrphans(text) {
+    return text.replace(
+      /(^|[\s(«„“"'])([А-Яа-яЁё]{1,3})[^\S\n]+(?=[А-Яа-яЁё0-9])/g,
+      (match, prefix, word) => {
+        if (!ORPHAN_WORDS.has(word.toLowerCase())) {
+          return match;
+        }
+        return `${prefix}${word}${NBSP}`;
+      }
+    );
   }
   function serializeLetterSpacing(letterSpacing) {
     if (!letterSpacing || letterSpacing === figma.mixed) {
@@ -442,370 +483,18 @@
       console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0447\u0438\u0441\u0442\u0438\u0442\u044C snapshot \u0441\u043B\u043E\u044F", error);
     }
   }
-  function removeSpuriousHyphens(node) {
-    const text = node.characters;
-    const markerLen = INSERTED_BREAK_MARKER.length;
-    const positions = [];
-    let searchFrom = 0;
-    while (true) {
-      const pos = text.indexOf(INSERTED_BREAK_MARKER, searchFrom);
-      if (pos === -1) break;
-      positions.push(pos);
-      searchFrom = pos + 1;
-    }
-    if (positions.length === 0) return false;
-    const probe = node.clone();
-    probe.visible = false;
-    probe.x = -1e5;
-    probe.y = -1e5;
-    probe.textAutoResize = "HEIGHT";
-    try {
-      probe.characters = text;
-      const baselineHeight = probe.height;
-      const toRemove = [];
-      for (const pos of positions) {
-        const testText = text.slice(0, pos) + text.slice(pos + markerLen);
-        probe.characters = testText;
-        if (Math.abs(probe.height - baselineHeight) < 0.5) {
-          toRemove.push(pos);
-        }
-      }
-      if (toRemove.length === 0) return false;
-      let cleanText = text;
-      for (let i = toRemove.length - 1; i >= 0; i--) {
-        const p = toRemove[i];
-        cleanText = cleanText.slice(0, p) + cleanText.slice(p + markerLen);
-      }
-      node.characters = cleanText;
-      return true;
-    } finally {
-      probe.remove();
-    }
-  }
-  function fixOrphansAfterCleanup(node) {
-    const text = node.characters;
-    const candidates = [];
-    const re = new RegExp('(?<![\u0410-\u042F\u0401\u0430-\u044F\u0451])([\u0410-\u042F\u0401\u0430-\u044F\u0451]{1,3}) (?=[\u0410-\u042F\u0401\u0430-\u044F\u04510-9\xAB"(\u201E])', "g");
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (!ORPHAN_WORDS.has(m[1].toLowerCase())) continue;
-      candidates.push(m.index + m[1].length);
-    }
-    if (candidates.length === 0) return false;
-    const probe = node.clone();
-    probe.visible = false;
-    probe.x = -1e5;
-    probe.y = -1e5;
-    probe.textAutoResize = "HEIGHT";
-    try {
-      probe.characters = text;
-      const baselineHeight = probe.height;
-      const confirmed = [];
-      for (const spacePos of candidates) {
-        const testText = text.slice(0, spacePos) + "\n" + text.slice(spacePos + 1);
-        probe.characters = testText;
-        if (probe.height < baselineHeight + 0.5) {
-          confirmed.push(spacePos);
-        }
-      }
-      if (confirmed.length === 0) return false;
-      let result = text;
-      for (let i = confirmed.length - 1; i >= 0; i--) {
-        const pos = confirmed[i];
-        result = result.slice(0, pos) + NBSP + result.slice(pos + 1);
-      }
-      node.characters = result;
-      return true;
-    } finally {
-      probe.remove();
-    }
-  }
-  function addHyphensForSparseLines(node, settings) {
-    return false;
-    const text = node.characters;
-    if (!text || text.length === 0) return false;
-    const colW = node.width;
-    if (colW <= 0) return false;
-    const paraSpacingPx = typeof node.paragraphSpacing === "number" ? node.paragraphSpacing : 0;
-    const globalTracking = getNodeLetterSpacing(node);
-    const heightProbe = node.clone();
-    heightProbe.visible = false;
-    heightProbe.x = -100004;
-    heightProbe.y = -1e5;
-    heightProbe.textAutoResize = "HEIGHT";
-    const widthProbe = node.clone();
-    widthProbe.visible = false;
-    widthProbe.x = -100006;
-    widthProbe.y = -1e5;
-    widthProbe.textAutoResize = "WIDTH_AND_HEIGHT";
-    widthProbe.letterSpacing = globalTracking;
-    const measureW = (t) => {
-      widthProbe.characters = t;
-      return widthProbe.width;
-    };
-    try {
-      heightProbe.characters = text;
-      const baseHeight = heightProbe.height;
-      const wrapThreshold = baseHeight + paraSpacingPx + 0.5;
-      const events = [];
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] === "\n") {
-          events.push({ pos: i, type: "para" });
-          continue;
-        }
-        if (text[i] !== " ") continue;
-        const testText = text.slice(0, i) + "\n" + text.slice(i + 1);
-        heightProbe.characters = testText;
-        if (heightProbe.height <= wrapThreshold) events.push({ pos: i, type: "soft" });
-      }
-      let searchIdx = 0;
-      while (true) {
-        const mPos = text.indexOf(INSERTED_BREAK_MARKER, searchIdx);
-        if (mPos === -1) break;
-        const zwsCharPos = mPos + 1;
-        const testText = text.slice(0, zwsCharPos) + "\n" + text.slice(zwsCharPos + 1);
-        heightProbe.characters = testText;
-        if (heightProbe.height <= wrapThreshold) events.push({ pos: zwsCharPos, type: "zws" });
-        searchIdx = mPos + 1;
-      }
-      events.sort((a, b) => a.pos - b.pos);
-      const hasSoftWrap = events.some((e) => e.type === "soft");
-      if (!hasSoftWrap) return false;
-      const fixes = [];
-      let lineStart = 0;
-      let skipNextSoftFill = false;
-      for (const { pos, type } of events) {
-        if (type === "para") {
-          lineStart = pos + 1;
-          skipNextSoftFill = false;
-          continue;
-        }
-        const lineEnd = pos;
-        const nextStart = pos + 1;
-        if (type === "soft" && lineEnd > lineStart) {
-          const lineContent = text.slice(lineStart, lineEnd);
-          widthProbe.characters = lineContent;
-          const fillRatio = widthProbe.width / colW;
-          console.log(
-            "[SparseLineFix] line fill=",
-            fillRatio.toFixed(2),
-            "content=",
-            lineContent.slice(0, 40)
-          );
-          const shouldFix = fillRatio < SPARSE_LINE_FILL_THRESHOLD && fillRatio >= 0.3 && !skipNextSoftFill;
-          skipNextSoftFill = false;
-          if (shouldFix) {
-            let wordStart = nextStart;
-            while (wordStart < text.length && (text[wordStart] === ZERO_WIDTH_SPACE || text[wordStart] === "\xA0")) wordStart++;
-            let wordEnd = wordStart;
-            while (wordEnd < text.length && text[wordEnd] !== " " && text[wordEnd] !== "\xA0" && text[wordEnd] !== "\n" && text[wordEnd] !== ZERO_WIDTH_SPACE) {
-              wordEnd++;
-            }
-            if (wordEnd > wordStart) {
-              const nextWord = text.slice(wordStart, wordEnd);
-              const breakOffsets = getAllBreakOffsetsInToken(nextWord, settings);
-              console.log(
-                "[SparseLineFix] sparse! next word=",
-                nextWord,
-                "break offsets=",
-                breakOffsets
-              );
-              for (const offsetInWord of breakOffsets) {
-                const w1 = nextWord.slice(0, offsetInWord);
-                const w2 = nextWord.slice(offsetInWord);
-                widthProbe.characters = lineContent + " " + w1 + "-";
-                const newFillRatio = widthProbe.width / colW;
-                widthProbe.characters = lineContent + " " + w1 + "-" + w2;
-                const fullFillRatio = widthProbe.width / colW;
-                const accepted = newFillRatio >= SPARSE_LINE_FILL_THRESHOLD && newFillRatio <= 1 && fullFillRatio > 1;
-                console.log(
-                  "[SparseLineFix] offset=",
-                  offsetInWord,
-                  "w1fill=",
-                  newFillRatio.toFixed(2),
-                  "fullFill=",
-                  fullFillRatio.toFixed(2),
-                  accepted ? "ACCEPTED" : "rejected"
-                );
-                if (accepted) {
-                  fixes.push({ insertPos: wordStart + offsetInWord });
-                  skipNextSoftFill = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-        lineStart = nextStart;
-      }
-      if (fixes.length === 0) return false;
-      let newText = text;
-      for (const { insertPos } of [...fixes].sort((a, b) => b.insertPos - a.insertPos)) {
-        newText = newText.slice(0, insertPos) + INSERTED_BREAK_MARKER + newText.slice(insertPos);
-      }
-      node.characters = newText;
-      return true;
-    } finally {
-      heightProbe.remove();
-      widthProbe.remove();
-    }
-  }
-  function optimizeSparseLineTracking(node, settings) {
-    const text = node.characters;
-    if (!text || text.length === 0) return false;
-    const colW = node.width;
-    if (colW <= 0) return false;
-    const fontSize = typeof node.fontSize === "number" && node.fontSize > 0 ? node.fontSize : 16;
-    const globalTracking = getNodeLetterSpacing(node);
-    const globalPercent = convertNodeSpacingToPercent(globalTracking, node);
-    const maxPercent = settings.letterSpacingMaxPercent;
-    const perLineMax = maxPercent;
-    const heightProbe = node.clone();
-    heightProbe.visible = false;
-    heightProbe.x = -1e5;
-    heightProbe.y = -1e5;
-    heightProbe.textAutoResize = "HEIGHT";
-    const widthProbe = node.clone();
-    widthProbe.visible = false;
-    widthProbe.x = -100002;
-    widthProbe.y = -1e5;
-    widthProbe.textAutoResize = "WIDTH_AND_HEIGHT";
-    widthProbe.letterSpacing = globalTracking;
-    const paraSpacingPx = typeof node.paragraphSpacing === "number" ? node.paragraphSpacing : 0;
-    try {
-      heightProbe.characters = text;
-      const baseHeight = heightProbe.height;
-      const softWrapThreshold = baseHeight + paraSpacingPx + 0.5;
-      const softWrapPos = [];
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] !== " ") continue;
-        const testText = text.slice(0, i) + "\n" + text.slice(i + 1);
-        heightProbe.characters = testText;
-        if (heightProbe.height <= softWrapThreshold) {
-          softWrapPos.push(i);
-        }
-      }
-      if (softWrapPos.length === 0) return false;
-      const events = softWrapPos.map((pos) => ({ pos, type: "soft" }));
-      const markerLen = INSERTED_BREAK_MARKER.length;
-      let searchIdx = 0;
-      while (true) {
-        const mPos = text.indexOf(INSERTED_BREAK_MARKER, searchIdx);
-        if (mPos === -1) break;
-        events.push({ pos: mPos, type: "hyphen" });
-        searchIdx = mPos + 1;
-      }
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] === "\n") events.push({ pos: i, type: "para" });
-      }
-      events.sort((a, b) => a.pos - b.pos);
-      const TARGET_FILL = 0.9;
-      const sparseCandidates = [];
-      let lineStart = 0;
-      for (const { pos, type } of events) {
-        if (type === "para") {
-          lineStart = pos + 1;
-          continue;
-        }
-        let lineEnd, nextStart;
-        if (type === "soft") {
-          lineEnd = pos;
-          nextStart = pos + 1;
-        } else {
-          lineEnd = pos + markerLen;
-          nextStart = pos + markerLen;
-        }
-        if (type === "soft" && lineEnd > lineStart) {
-          const lineContent = text.slice(lineStart, lineEnd);
-          widthProbe.characters = lineContent;
-          const naturalWidth = widthProbe.width;
-          const fillRatio = naturalWidth / colW;
-          const wordCount = (lineContent.match(/\S+/g) || []).length;
-          const extraGapFraction = wordCount > 1 ? (1 - fillRatio) / (wordCount - 1) : 0;
-          const lineIsSparse = fillRatio < SPARSE_LINE_FILL_THRESHOLD || extraGapFraction > SPARSE_GAP_FRACTION;
-          if (lineIsSparse) {
-            const nChars = [...lineContent].filter(
-              (c) => c !== ZERO_WIDTH_SPACE
-            ).length;
-            if (nChars > 0) {
-              const neededPx = (TARGET_FILL - fillRatio) * colW;
-              const deltaPercent = neededPx * 100 / (nChars * fontSize);
-              const newPercent = Math.min(globalPercent + deltaPercent, perLineMax);
-              if (newPercent - globalPercent >= 0.5) {
-                sparseCandidates.push({ start: lineStart, end: nextStart, newPercent });
-              }
-            }
-          }
-        }
-        lineStart = nextStart;
-      }
-      if (sparseCandidates.length === 0) return false;
-      let changed = false;
-      for (const { start, end, newPercent } of sparseCandidates) {
-        node.setRangeLetterSpacing(start, end, {
-          unit: globalTracking.unit,
-          value: convertPercentSpacingToNodeUnit(newPercent, node, globalTracking.unit)
-        });
-        changed = true;
-      }
-      return changed;
-    } finally {
-      heightProbe.remove();
-      widthProbe.remove();
-    }
+  function countInsertedBreaks(text) {
+    const matches = text.match(/-\u200B/g);
+    return matches ? matches.length : 0;
   }
   function fitsWithinWidth(text, maxWidth, measureWidth) {
     return measureWidth(text) <= maxWidth + WIDTH_EPSILON;
   }
-  function preJoinOrphansInQueue(arr) {
-    const out = [];
-    let i = 0;
-    while (i < arr.length) {
-      const t = arr[i];
-      if (!SPACE_TOKEN_REGEX.test(t)) {
-        const cyr = t.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
-        if (ORPHAN_WORDS.has(cyr)) {
-          let j = i + 1;
-          while (j < arr.length && SPACE_TOKEN_REGEX.test(arr[j])) j++;
-          if (j < arr.length && /^[А-ЯЁа-яё0-9«"(„]/.test(arr[j])) {
-            out.push(t + NBSP + arr[j]);
-            i = j + 1;
-            continue;
-          }
-        }
-      }
-      out.push(t);
-      i++;
-    }
-    return out;
-  }
-  function getAllBreakOffsetsInToken(token, options) {
-    const minWordLength = options != null && options.minWordLengthForHyphenation != null ? options.minWordLengthForHyphenation : 4;
-    const minBefore = options != null && options.minLettersBeforeHyphen != null ? options.minLettersBeforeHyphen : 2;
-    const minAfter = options != null && options.minLettersAfterHyphen != null ? options.minLettersAfterHyphen : 3;
-    const forbidden = options != null && options.forbiddenBreaks instanceof Set ? options.forbiddenBreaks : null;
-    const match = token.match(RUSSIAN_TOKEN_REGEX);
-    if (!match) return [];
-    const leading = match[1];
-    const core = match[2];
-    if (core.length < minWordLength) return [];
-    const parts = hypher.hyphenate(core);
-    if (!parts || parts.length <= 1) return [];
-    const offsets = [];
-    for (let i = parts.length - 1; i >= 1; i--) {
-      const leftCore = parts.slice(0, i).join("");
-      const rightCore = parts.slice(i).join("");
-      if (leftCore.length < minBefore || rightCore.length < minAfter) continue;
-      if (forbidden && forbidden.has(`${core}:${leftCore}`)) continue;
-      offsets.push(leading.length + leftCore.length);
-    }
-    return offsets;
-  }
   function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
-    const forbidden = options && options.forbiddenBreaks instanceof Set ? options.forbiddenBreaks : null;
+    const useHangingHyphen = Boolean(options && options.hangingHyphen);
     const minWordLength = options && typeof options.minWordLengthForHyphenation === "number" ? options.minWordLengthForHyphenation : 4;
-    const minBefore = options && typeof options.minLettersBeforeHyphen === "number" ? options.minLettersBeforeHyphen : 2;
-    const minAfter = options && typeof options.minLettersAfterHyphen === "number" ? options.minLettersAfterHyphen : 3;
+    const intensity = options && typeof options.hyphenationIntensity === "string" ? options.hyphenationIntensity : "normal";
+    const minIntensityRank = intensity in HYPHENATION_INTENSITY_ORDER ? HYPHENATION_INTENSITY_ORDER[intensity] : HYPHENATION_INTENSITY_ORDER.normal;
     const match = token.match(RUSSIAN_TOKEN_REGEX);
     if (!match) {
       return null;
@@ -823,14 +512,19 @@
     for (let i = parts.length - 1; i >= 1; i -= 1) {
       const leftCore = parts.slice(0, i).join("");
       const rightCore = parts.slice(i).join("");
-      if (leftCore.length < minBefore || rightCore.length < minAfter) {
-        continue;
-      }
-      if (forbidden && forbidden.has(`${core}:${leftCore}`)) {
+      const shortFragment = Math.min(leftCore.length, rightCore.length);
+      const fragmentIntensityRank = shortFragment >= 3 ? HYPHENATION_INTENSITY_ORDER.soft : shortFragment === 2 ? HYPHENATION_INTENSITY_ORDER.normal : HYPHENATION_INTENSITY_ORDER.aggressive;
+      if (fragmentIntensityRank < minIntensityRank) {
         continue;
       }
       const leftWithDash = `${leading}${leftCore}-`;
-      if (measureWidth(leftWithDash) <= remainingWidth + WIDTH_EPSILON) {
+      const leftWithoutDash = `${leading}${leftCore}`;
+      const widthWithoutDash = measureWidth(leftWithoutDash);
+      const widthWithDash = measureWidth(leftWithDash);
+      const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
+      const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
+      const fitsWithHangingHyphen = useHangingHyphen && widthWithoutDash <= remainingWidth + WIDTH_EPSILON && widthWithDash <= remainingWidth + dashWidth + 0.5;
+      if (fitsNormally || fitsWithHangingHyphen) {
         return {
           left: `${leading}${leftCore}`,
           right: `${rightCore}${trailing}`
@@ -839,549 +533,94 @@
     }
     return null;
   }
-  function simulateParagraphLines(paraText, maxWidth, measureWidth) {
-    const tokens = paraText.match(TOKEN_REGEX) || [];
-    const lines = [];
-    let currentLine = "";
-    let pendingSpaces = "";
-    for (const token of tokens) {
-      if (SPACE_TOKEN_REGEX.test(token)) {
-        pendingSpaces += token;
-        continue;
+  function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
+    const normalized = normalizeTextForRehyphenation(text);
+    const lines = normalized.split("\n");
+    const maxHyphensPerParagraph = options && typeof options.maxHyphensPerParagraph === "number" ? options.maxHyphensPerParagraph : 0;
+    const transformedLines = lines.map((line) => {
+      const tokens = line.match(TOKEN_REGEX);
+      if (!tokens) {
+        return line;
       }
-      if (token.includes(ZERO_WIDTH_SPACE)) {
-        const cleanTok = token.replace(/​/g, "");
-        currentLine += pendingSpaces + cleanTok;
-        lines.push(currentLine);
-        currentLine = "";
-        pendingSpaces = "";
-        continue;
-      }
-      const candidate = currentLine ? currentLine + pendingSpaces + token : token;
-      if (!currentLine || fitsWithinWidth(candidate, maxWidth, measureWidth)) {
-        currentLine = candidate;
-      } else {
-        if (currentLine) lines.push(currentLine);
-        currentLine = token;
-      }
-      pendingSpaces = "";
-    }
-    if (currentLine.trim()) lines.push(currentLine);
-    return lines;
-  }
-  function processOneParagraph(lineText, maxWidth, measureWidth, options, maxHyphensPara, maxConsecHyphens) {
-    const tokens = lineText.match(TOKEN_REGEX);
-    if (!tokens) return { text: lineText, breakCount: 0, unsolvedSparseLines: 0 };
-    let result = "";
-    let currentLine = "";
-    let pendingSpaces = "";
-    let insertedBreaks = 0;
-    let consecutiveHyphenLines = 0;
-    let lineWordCount = 0;
-    let lastWordInfo = null;
-    let secondToLastWordInfo = null;
-    let thirdToLastWordInfo = null;
-    let fourthToLastWordInfo = null;
-    let fifthToLastWordInfo = null;
-    let prevLineLastWordInfo = null;
-    let prevLineSecondToLastWordInfo = null;
-    let prevLineWasNatural = false;
-    let unsolvedSparseLines = 0;
-    const processingQueue = Array.from(tokens);
-    let qIdx = 0;
-    while (qIdx < processingQueue.length) {
-      const token = processingQueue[qIdx++];
-      if (SPACE_TOKEN_REGEX.test(token)) {
-        pendingSpaces += token;
-        continue;
-      }
-      const resultLenBeforeSpaces = result.length;
-      const currentLineBeforeSpaces = currentLine;
-      const spacesForWord = pendingSpaces;
-      result += pendingSpaces;
-      let chunk = token;
-      let linePrefix = `${currentLine}${pendingSpaces}`;
-      while (chunk.length > 0) {
-        if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
-          if (linePrefix === "" && prevLineWasNatural && prevLineSecondToLastWordInfo !== null) {
-            const widowConsecLimitReached = maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
-            if (!widowConsecLimitReached) {
-              const cyrillicChars = chunk.replace(/[^А-ЯЁа-яё]/g, "");
-              if (cyrillicChars.length > 0 && cyrillicChars.length <= WIDOW_WORD_THRESHOLD) {
-                const Y = prevLineSecondToLastWordInfo;
-                const Z = prevLineLastWordInfo;
-                if (Z !== null) {
-                  const remainingForY = maxWidth - measureWidth(Y.currentLineBefore + Y.spacesBeforeWord);
-                  if (remainingForY > 0) {
-                    const yBreak = findBestBreakInToken(Y.token, remainingForY, measureWidth, options);
-                    if (yBreak) {
-                      const combinedWidth = measureWidth(
-                        yBreak.right + Z.spacesBeforeWord + Z.token + spacesForWord + chunk
-                      );
-                      if (combinedWidth <= maxWidth + WIDTH_EPSILON) {
-                        result = result.slice(0, Y.resultLenBeforeSpaces);
-                        result += Y.spacesBeforeWord + yBreak.left + INSERTED_BREAK_MARKER;
-                        insertedBreaks += 1;
-                        consecutiveHyphenLines += 1;
-                        const pushBack = preJoinOrphansInQueue([
-                          yBreak.right,
-                          ...Z.spacesBeforeWord ? [Z.spacesBeforeWord] : [],
-                          Z.token,
-                          ...spacesForWord ? [spacesForWord] : [],
-                          chunk
-                        ]);
-                        processingQueue.splice(qIdx, 0, ...pushBack);
-                        prevLineLastWordInfo = null;
-                        prevLineSecondToLastWordInfo = null;
-                        prevLineWasNatural = false;
-                        currentLine = "";
-                        linePrefix = "";
-                        lineWordCount = 0;
-                        lastWordInfo = null;
-                        secondToLastWordInfo = null;
-                        thirdToLastWordInfo = null;
-                        fourthToLastWordInfo = null;
-                        fifthToLastWordInfo = null;
-                        pendingSpaces = "";
-                        chunk = "";
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          if (linePrefix === "") {
-            prevLineLastWordInfo = null;
-            prevLineSecondToLastWordInfo = null;
-            prevLineWasNatural = false;
-          }
-          result += chunk;
-          currentLine = `${linePrefix}${chunk}`;
-          chunk = "";
-          lineWordCount++;
-          fifthToLastWordInfo = fourthToLastWordInfo;
-          fourthToLastWordInfo = thirdToLastWordInfo;
-          thirdToLastWordInfo = secondToLastWordInfo;
-          secondToLastWordInfo = lastWordInfo;
-          const prevLastWordInfo = lastWordInfo;
-          lastWordInfo = {
-            token,
-            resultLenBeforeSpaces,
-            spacesBeforeWord: spacesForWord,
-            currentLineBefore: currentLineBeforeSpaces
-          };
-          if (options && options.preventOrphans && currentLineBeforeSpaces.length > 0) {
-            const lastPart = token.split(NBSP).pop();
-            const cyrillicOnly = lastPart.replace(/[^А-ЯЁа-яё]/g, "").toLowerCase();
-            if (ORPHAN_WORDS.has(cyrillicOnly)) {
-              let pi = qIdx;
-              while (pi < processingQueue.length && SPACE_TOKEN_REGEX.test(processingQueue[pi])) pi++;
-              if (pi < processingQueue.length) {
-                const nextTok = processingQueue[pi];
-                const interSp = processingQueue.slice(qIdx, pi).join("");
-                const nextStartsCyrillicOrDigit = /^[А-ЯЁа-яё0-9«"(„]/.test(nextTok);
-                const fillAfterRollback = maxWidth > 0 ? measureWidth(currentLineBeforeSpaces) / maxWidth : 0;
-                const shouldSkipRollback = cyrillicOnly.length >= 3 && fillAfterRollback < 0.93;
-                if (nextStartsCyrillicOrDigit && !fitsWithinWidth(currentLine + interSp + nextTok, maxWidth, measureWidth) && !shouldSkipRollback) {
-                  result = result.slice(0, resultLenBeforeSpaces);
-                  currentLine = currentLineBeforeSpaces;
-                  lineWordCount = Math.max(0, lineWordCount - 1);
-                  lastWordInfo = prevLastWordInfo;
-                  secondToLastWordInfo = thirdToLastWordInfo;
-                  thirdToLastWordInfo = fourthToLastWordInfo;
-                  fourthToLastWordInfo = fifthToLastWordInfo;
-                  fifthToLastWordInfo = null;
-                  processingQueue.splice(qIdx, pi - qIdx + 1);
-                  processingQueue.splice(qIdx, 0, token + NBSP + nextTok);
-                  if (spacesForWord.length > 0) {
-                    processingQueue.splice(qIdx, 0, spacesForWord);
-                  }
-                }
-              }
-            }
-          }
-          break;
-        }
-        const reachedParagraphLimit = maxHyphensPara > 0 && insertedBreaks >= maxHyphensPara;
-        const reachedConsecutiveLimit = maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
-        const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
-        if (linePrefix.length > 0) {
-          const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
-          const extraGapFraction = lineWordCount > 1 ? (1 - lineFillRatio) / (lineWordCount - 1) : 0;
-          const isLineSparse = lineFillRatio > 0.1 && (lineFillRatio < SPARSE_LINE_FILL_THRESHOLD || extraGapFraction > SPARSE_GAP_FRACTION);
-          const canBreak = (!reachedParagraphLimit || isLineSparse) && (!reachedConsecutiveLimit || isLineSparse);
-          let breakPoint2 = null;
-          if (canBreak) {
-            breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, options);
-          }
-          if (!breakPoint2 && isLineSparse) {
-            breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, __spreadProps(__spreadValues({}, options), {
-              minLettersBeforeHyphen: 1,
-              minLettersAfterHyphen: 1
-            }));
-          }
-          if (breakPoint2) {
-            result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
-            insertedBreaks += 1;
-            consecutiveHyphenLines += 1;
-            chunk = breakPoint2.right;
-            currentLine = "";
-            linePrefix = "";
-            lineWordCount = 0;
-            lastWordInfo = null;
-            secondToLastWordInfo = null;
-            thirdToLastWordInfo = null;
-            fourthToLastWordInfo = null;
-            fifthToLastWordInfo = null;
-            prevLineLastWordInfo = null;
-            prevLineSecondToLastWordInfo = null;
-            prevLineWasNatural = false;
-            continue;
-          }
-          const lbWordCount = lineWordCount === 2 || lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse;
-          if (lbWordCount && lastWordInfo !== null && (!reachedConsecutiveLimit || isLineSparse)) {
-            const lw = lastWordInfo;
-            const remainingForLw = maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
-            const lbBreak = findBestBreakInToken(
-              lw.token,
-              remainingForLw,
-              measureWidth,
-              options
-            );
-            if (lbBreak) {
-              result = result.slice(0, lw.resultLenBeforeSpaces);
-              result += lw.spacesBeforeWord + lbBreak.left + INSERTED_BREAK_MARKER;
-              insertedBreaks += 1;
-              consecutiveHyphenLines += 1;
-              {
-                const raw = [lbBreak.right, ...spacesForWord.length > 0 ? [spacesForWord] : [], token];
-                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(raw));
-              }
-              currentLine = "";
-              linePrefix = "";
-              lineWordCount = 0;
-              lastWordInfo = null;
-              secondToLastWordInfo = null;
-              thirdToLastWordInfo = null;
-              fourthToLastWordInfo = null;
-              fifthToLastWordInfo = null;
-              prevLineLastWordInfo = null;
-              prevLineSecondToLastWordInfo = null;
-              prevLineWasNatural = false;
-              chunk = "";
-              break;
-            }
-            if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse && secondToLastWordInfo !== null) {
-              const slw = secondToLastWordInfo;
-              const remainingForSlw = maxWidth - measureWidth(slw.currentLineBefore + slw.spacesBeforeWord);
-              const slwBreak = findBestBreakInToken(
-                slw.token,
-                remainingForSlw,
-                measureWidth,
-                options
-              );
-              if (slwBreak) {
-                result = result.slice(0, slw.resultLenBeforeSpaces);
-                result += slw.spacesBeforeWord + slwBreak.left + INSERTED_BREAK_MARKER;
-                insertedBreaks += 1;
-                consecutiveHyphenLines += 1;
-                const rawPushBack2 = [
-                  slwBreak.right,
-                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
-                  lw.token,
-                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
-                  token
-                ];
-                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack2));
-                currentLine = "";
-                linePrefix = "";
-                lineWordCount = 0;
-                lastWordInfo = null;
-                secondToLastWordInfo = null;
-                thirdToLastWordInfo = null;
-                fourthToLastWordInfo = null;
-                fifthToLastWordInfo = null;
-                prevLineLastWordInfo = null;
-                prevLineSecondToLastWordInfo = null;
-                prevLineWasNatural = false;
-                chunk = "";
-                break;
-              }
-            }
-            if (lineWordCount >= 3 && lineWordCount <= 7 && isLineSparse && thirdToLastWordInfo !== null) {
-              const tlw = thirdToLastWordInfo;
-              const slw = secondToLastWordInfo;
-              const remainingForTlw = maxWidth - measureWidth(tlw.currentLineBefore + tlw.spacesBeforeWord);
-              const tlwBreak = findBestBreakInToken(
-                tlw.token,
-                remainingForTlw,
-                measureWidth,
-                options
-              );
-              if (tlwBreak) {
-                result = result.slice(0, tlw.resultLenBeforeSpaces);
-                result += tlw.spacesBeforeWord + tlwBreak.left + INSERTED_BREAK_MARKER;
-                insertedBreaks += 1;
-                consecutiveHyphenLines += 1;
-                const rawPushBack3 = [
-                  tlwBreak.right,
-                  ...slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : [],
-                  ...slw ? [slw.token] : [],
-                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
-                  lw.token,
-                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
-                  token
-                ];
-                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack3));
-                currentLine = "";
-                linePrefix = "";
-                lineWordCount = 0;
-                lastWordInfo = null;
-                secondToLastWordInfo = null;
-                thirdToLastWordInfo = null;
-                fourthToLastWordInfo = null;
-                fifthToLastWordInfo = null;
-                prevLineLastWordInfo = null;
-                prevLineSecondToLastWordInfo = null;
-                prevLineWasNatural = false;
-                chunk = "";
-                break;
-              }
-            }
-            if (lineWordCount >= 4 && lineWordCount <= 7 && isLineSparse && fourthToLastWordInfo !== null) {
-              const flw = fourthToLastWordInfo;
-              const tlw = thirdToLastWordInfo;
-              const slw = secondToLastWordInfo;
-              const remainingForFlw = maxWidth - measureWidth(flw.currentLineBefore + flw.spacesBeforeWord);
-              const flwBreak = findBestBreakInToken(
-                flw.token,
-                remainingForFlw,
-                measureWidth,
-                options
-              );
-              if (flwBreak) {
-                result = result.slice(0, flw.resultLenBeforeSpaces);
-                result += flw.spacesBeforeWord + flwBreak.left + INSERTED_BREAK_MARKER;
-                insertedBreaks += 1;
-                consecutiveHyphenLines += 1;
-                const rawPushBack4 = [
-                  flwBreak.right,
-                  ...tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : [],
-                  ...tlw ? [tlw.token] : [],
-                  ...slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : [],
-                  ...slw ? [slw.token] : [],
-                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
-                  lw.token,
-                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
-                  token
-                ];
-                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack4));
-                currentLine = "";
-                linePrefix = "";
-                lineWordCount = 0;
-                lastWordInfo = null;
-                secondToLastWordInfo = null;
-                thirdToLastWordInfo = null;
-                fourthToLastWordInfo = null;
-                fifthToLastWordInfo = null;
-                prevLineLastWordInfo = null;
-                prevLineSecondToLastWordInfo = null;
-                prevLineWasNatural = false;
-                chunk = "";
-                break;
-              }
-            }
-            if (lineWordCount >= 5 && lineWordCount <= 7 && isLineSparse && fifthToLastWordInfo !== null) {
-              const xw = fifthToLastWordInfo;
-              const flw = fourthToLastWordInfo;
-              const tlw = thirdToLastWordInfo;
-              const slw = secondToLastWordInfo;
-              const remainingForXw = maxWidth - measureWidth(xw.currentLineBefore + xw.spacesBeforeWord);
-              const xwBreak = findBestBreakInToken(
-                xw.token,
-                remainingForXw,
-                measureWidth,
-                options
-              );
-              if (xwBreak) {
-                result = result.slice(0, xw.resultLenBeforeSpaces);
-                result += xw.spacesBeforeWord + xwBreak.left + INSERTED_BREAK_MARKER;
-                insertedBreaks += 1;
-                consecutiveHyphenLines += 1;
-                const rawPushBack5 = [
-                  xwBreak.right,
-                  ...flw && flw.spacesBeforeWord ? [flw.spacesBeforeWord] : [],
-                  ...flw ? [flw.token] : [],
-                  ...tlw && tlw.spacesBeforeWord ? [tlw.spacesBeforeWord] : [],
-                  ...tlw ? [tlw.token] : [],
-                  ...slw && slw.spacesBeforeWord ? [slw.spacesBeforeWord] : [],
-                  ...slw ? [slw.token] : [],
-                  ...lw.spacesBeforeWord ? [lw.spacesBeforeWord] : [],
-                  lw.token,
-                  ...spacesForWord.length > 0 ? [spacesForWord] : [],
-                  token
-                ];
-                processingQueue.splice(qIdx, 0, ...preJoinOrphansInQueue(rawPushBack5));
-                currentLine = "";
-                linePrefix = "";
-                lineWordCount = 0;
-                lastWordInfo = null;
-                secondToLastWordInfo = null;
-                thirdToLastWordInfo = null;
-                fourthToLastWordInfo = null;
-                fifthToLastWordInfo = null;
-                prevLineLastWordInfo = null;
-                prevLineSecondToLastWordInfo = null;
-                prevLineWasNatural = false;
-                chunk = "";
-                break;
-              }
-            }
-          }
-          if (isLineSparse) {
-            unsolvedSparseLines += 1;
-          }
-          prevLineLastWordInfo = lastWordInfo;
-          prevLineSecondToLastWordInfo = secondToLastWordInfo;
-          prevLineWasNatural = true;
-          consecutiveHyphenLines = 0;
-          linePrefix = "";
-          lineWordCount = 0;
-          lastWordInfo = null;
-          secondToLastWordInfo = null;
-          thirdToLastWordInfo = null;
-          fourthToLastWordInfo = null;
-          fifthToLastWordInfo = null;
+      let result = "";
+      let currentLine = "";
+      let pendingSpaces = "";
+      let insertedBreaks = 0;
+      for (const token of tokens) {
+        if (SPACE_TOKEN_REGEX.test(token)) {
+          pendingSpaces += token;
           continue;
         }
-        if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
+        result += pendingSpaces;
+        let chunk = token;
+        let linePrefix = `${currentLine}${pendingSpaces}`;
+        while (chunk.length > 0) {
+          if (fitsWithinWidth(`${linePrefix}${chunk}`, maxWidth, measureWidth)) {
+            result += chunk;
+            currentLine = `${linePrefix}${chunk}`;
+            chunk = "";
+            break;
+          }
+          const reachedParagraphLimit = maxHyphensPerParagraph > 0 && insertedBreaks >= maxHyphensPerParagraph;
+          const remainingWidth = Math.max(0, maxWidth - measureWidth(linePrefix));
+          if (linePrefix.length > 0) {
+            const lineFillRatio = maxWidth > 0 ? 1 - remainingWidth / maxWidth : 0;
+            const isLineSparse = lineFillRatio > 0.1 && lineFillRatio < SPARSE_LINE_FILL_THRESHOLD;
+            let breakPoint2 = null;
+            if (!reachedParagraphLimit || isLineSparse) {
+              breakPoint2 = findBestBreakInToken(
+                chunk,
+                remainingWidth,
+                measureWidth,
+                options
+              );
+            }
+            if (!breakPoint2 && isLineSparse) {
+              breakPoint2 = findBestBreakInToken(chunk, remainingWidth, measureWidth, __spreadProps(__spreadValues({}, options), {
+                hyphenationIntensity: "soft"
+              }));
+            }
+            if (breakPoint2) {
+              result += `${breakPoint2.left}${INSERTED_BREAK_MARKER}`;
+              insertedBreaks += 1;
+              chunk = breakPoint2.right;
+              currentLine = "";
+              linePrefix = "";
+              continue;
+            }
+            linePrefix = "";
+            continue;
+          }
+          if (fitsWithinWidth(chunk, maxWidth, measureWidth)) {
+            result += chunk;
+            currentLine = chunk;
+            chunk = "";
+            break;
+          }
+          const breakPoint = reachedParagraphLimit ? null : findBestBreakInToken(
+            chunk,
+            maxWidth,
+            measureWidth,
+            options
+          );
+          if (breakPoint) {
+            result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
+            insertedBreaks += 1;
+            chunk = breakPoint.right;
+            currentLine = "";
+            linePrefix = "";
+            continue;
+          }
           result += chunk;
           currentLine = chunk;
           chunk = "";
-          lineWordCount++;
-          secondToLastWordInfo = lastWordInfo;
-          lastWordInfo = {
-            token,
-            resultLenBeforeSpaces,
-            spacesBeforeWord: spacesForWord,
-            currentLineBefore: currentLineBeforeSpaces
-          };
-          break;
         }
-        const canBreakLong = !reachedParagraphLimit && !reachedConsecutiveLimit;
-        const breakPoint = canBreakLong ? findBestBreakInToken(chunk, maxWidth, measureWidth, options) : null;
-        if (breakPoint) {
-          result += `${breakPoint.left}${INSERTED_BREAK_MARKER}`;
-          insertedBreaks += 1;
-          consecutiveHyphenLines += 1;
-          chunk = breakPoint.right;
-          currentLine = "";
-          linePrefix = "";
-          lineWordCount = 0;
-          lastWordInfo = null;
-          secondToLastWordInfo = null;
-          thirdToLastWordInfo = null;
-          fourthToLastWordInfo = null;
-          fifthToLastWordInfo = null;
-          prevLineLastWordInfo = null;
-          prevLineSecondToLastWordInfo = null;
-          prevLineWasNatural = false;
-          continue;
-        }
-        consecutiveHyphenLines = 0;
-        result += chunk;
-        currentLine = chunk;
-        chunk = "";
-        lineWordCount++;
-        fifthToLastWordInfo = fourthToLastWordInfo;
-        fourthToLastWordInfo = thirdToLastWordInfo;
-        thirdToLastWordInfo = secondToLastWordInfo;
-        secondToLastWordInfo = lastWordInfo;
-        lastWordInfo = {
-          token,
-          resultLenBeforeSpaces,
-          spacesBeforeWord: spacesForWord,
-          currentLineBefore: currentLineBeforeSpaces
-        };
+        pendingSpaces = "";
       }
-      pendingSpaces = "";
-    }
-    result += pendingSpaces;
-    const postLoopConsecLimit = maxConsecHyphens > 0 && consecutiveHyphenLines >= maxConsecHyphens;
-    if (lastWordInfo !== null && lineWordCount >= 2 && !postLoopConsecLimit) {
-      const lastLineFill = maxWidth > 0 ? measureWidth(currentLine) / maxWidth : 1;
-      const lastExtraGap = lineWordCount > 1 ? (1 - lastLineFill) / (lineWordCount - 1) : 0;
-      const lastLineSparse = lastLineFill > 0.1 && (lastLineFill < SPARSE_LINE_FILL_THRESHOLD || lastExtraGap > SPARSE_GAP_FRACTION);
-      if (lastLineSparse) {
-        const lw = lastWordInfo;
-        const remainingForLw = maxWidth - measureWidth(lw.currentLineBefore + lw.spacesBeforeWord);
-        const postBreak = findBestBreakInToken(lw.token, remainingForLw, measureWidth, options);
-        if (postBreak) {
-          result = result.slice(0, lw.resultLenBeforeSpaces);
-          result += lw.spacesBeforeWord + postBreak.left + INSERTED_BREAK_MARKER + postBreak.right;
-          insertedBreaks += 1;
-        } else if (secondToLastWordInfo !== null) {
-          const slw = secondToLastWordInfo;
-          const remainingForSlw = maxWidth - measureWidth(slw.currentLineBefore + slw.spacesBeforeWord);
-          const slwBreak = findBestBreakInToken(slw.token, remainingForSlw, measureWidth, options);
-          if (slwBreak) {
-            result = result.slice(0, slw.resultLenBeforeSpaces);
-            result += slw.spacesBeforeWord + slwBreak.left + INSERTED_BREAK_MARKER;
-            result += lw.spacesBeforeWord + lw.token;
-            insertedBreaks += 1;
-          }
-        }
-      }
-    }
-    const simLines = simulateParagraphLines(result, maxWidth, measureWidth);
-    let widowWordLines = 0;
-    for (let i = 1; i < simLines.length - 1; i++) {
-      const lineTokens = simLines[i].match(TOKEN_REGEX) || [];
-      const firstContent = lineTokens.find((t) => !SPACE_TOKEN_REGEX.test(t));
-      if (!firstContent) continue;
-      const cyrillicLen = firstContent.replace(/[^А-ЯЁа-яё]/g, "").length;
-      if (cyrillicLen > 0 && cyrillicLen <= WIDOW_WORD_THRESHOLD) {
-        const contentCount = lineTokens.filter((t) => !SPACE_TOKEN_REGEX.test(t)).length;
-        if (contentCount >= 2) widowWordLines++;
-      }
-    }
-    return { text: result, breakCount: insertedBreaks, unsolvedSparseLines, widowWordLines };
-  }
-  function hyphenateRussianTextWithVisibleDash(text, maxWidth, measureWidth, options) {
-    const normalized = normalizeTextForRehyphenation(text);
-    const paragraphs = normalized.split("\n");
-    const maxHyphensPara = options && typeof options.maxHyphensPerParagraph === "number" ? options.maxHyphensPerParagraph : 0;
-    const maxConsecHyphens = options && typeof options.maxConsecutiveHyphens === "number" ? options.maxConsecutiveHyphens : 0;
-    let totalBreakCount = 0;
-    let totalUnsolvedSparseLines = 0;
-    let totalWidowWordLines = 0;
-    const transformedParagraphs = [];
-    for (const line of paragraphs) {
-      if (!line.match(TOKEN_REGEX)) {
-        transformedParagraphs.push(line);
-        continue;
-      }
-      const paraResult = processOneParagraph(
-        line,
-        maxWidth,
-        measureWidth,
-        options,
-        maxHyphensPara,
-        maxConsecHyphens
-      );
-      totalBreakCount += paraResult.breakCount;
-      totalUnsolvedSparseLines += paraResult.unsolvedSparseLines;
-      totalWidowWordLines += paraResult.widowWordLines;
-      transformedParagraphs.push(paraResult.text);
-    }
-    return {
-      text: transformedParagraphs.join("\n"),
-      breakCount: totalBreakCount,
-      unsolvedSparseLines: totalUnsolvedSparseLines,
-      widowWordLines: totalWidowWordLines
-    };
+      result += pendingSpaces;
+      return result;
+    });
+    return transformedLines.join("\n");
   }
   function getNodeLetterSpacing(node) {
     const spacing = node.letterSpacing;
@@ -1401,13 +640,12 @@
     if (!snapshot) {
       return false;
     }
-    const cleanText = normalizeToCleanText(snapshot.text);
     let changed = false;
-    if (node.characters !== cleanText) {
-      node.characters = cleanText;
+    if (node.characters !== snapshot.text) {
+      node.characters = snapshot.text;
       changed = true;
     }
-    if (snapshot.letterSpacing && (node.letterSpacing === figma.mixed || !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node)))) {
+    if (snapshot.letterSpacing && !sameLetterSpacing(snapshot.letterSpacing, getNodeLetterSpacing(node))) {
       node.letterSpacing = snapshot.letterSpacing;
       changed = true;
     }
@@ -1492,6 +730,7 @@
       node.fontName,
       node.fontSize,
       node.lineHeight,
+      node.letterSpacing,
       node.textCase,
       node.textDecoration
     ];
@@ -1739,13 +978,9 @@
         try {
           yield loadFontsForNode(node);
           const original = node.characters;
-          const existingSnapshot = readNodeSnapshot(node);
-          const originalLetterSpacing = existingSnapshot && existingSnapshot.letterSpacing ? existingSnapshot.letterSpacing : getNodeLetterSpacing(node);
-          const cleanOriginal = normalizeToCleanText(original);
+          const originalLetterSpacing = getNodeLetterSpacing(node);
           let transformed = original;
           let hasNodeChanges = false;
-          let mixedTypography = false;
-          let nodeSettings = settings;
           if (isResetMode) {
             if (restoreFromSnapshot(node)) {
               changedNodes += 1;
@@ -1753,50 +988,40 @@
             }
             transformed = resetHyphenationText(original);
           } else {
-            mixedTypography = hasMixedTypography(node);
-            nodeSettings = deriveSettingsForNode(node, settings);
-            let preparedText = settings.autoNbsp ? applyNonBreakingSpaces(cleanOriginal) : cleanOriginal;
+            const mixedTypography = hasMixedTypography(node);
+            let normalized = normalizeTextForRehyphenation(original);
+            let preparedText = settings.preventOrphans ? preventRussianOrphans(normalized) : normalized;
             if (settings.optimizeLetterSpacing && !mixedTypography) {
               const currentSpacing = getNodeLetterSpacing(node);
-              const currentSpacingPercent = convertNodeSpacingToPercent(originalLetterSpacing, node);
-              const candidates = getLetterSpacingCandidates(node, nodeSettings);
+              const currentSpacingPercent = convertNodeSpacingToPercent(currentSpacing, node);
+              const candidates = getLetterSpacingCandidates(node, settings);
               let bestText = preparedText;
-              let bestSpacing = originalLetterSpacing;
+              let bestSpacing = currentSpacing;
               let bestBreakCount = Number.POSITIVE_INFINITY;
-              let bestEffectiveSparse = Number.POSITIVE_INFINITY;
               let bestDesiredPenalty = Number.POSITIVE_INFINITY;
               let bestCurrentPenalty = Number.POSITIVE_INFINITY;
               const measurer = createWidthMeasurer(node);
               try {
                 for (const candidate of candidates) {
                   measurer.setLetterSpacing(candidate.letterSpacing);
-                  const hyphenResult = hyphenateRussianTextWithVisibleDash(
+                  const candidateText = hyphenateRussianTextWithVisibleDash(
                     preparedText,
                     node.width,
                     measurer.measure,
-                    nodeSettings
+                    settings
                   );
-                  const breakCount = hyphenResult.breakCount;
-                  const sparseCount = hyphenResult.unsolvedSparseLines;
-                  const widowCount = hyphenResult.widowWordLines;
+                  const breakCount = countInsertedBreaks(candidateText);
                   const desiredPenalty = Math.abs(
-                    candidate.percentValue - nodeSettings.letterSpacingDesiredPercent
+                    candidate.percentValue - settings.letterSpacingDesiredPercent
                   );
                   const currentPenalty = Math.abs(
                     candidate.percentValue - currentSpacingPercent
                   );
-                  const compressionPenalty = Math.max(
-                    0,
-                    nodeSettings.letterSpacingDesiredPercent - candidate.percentValue
-                  ) * 0.3;
-                  const effectiveSparse = sparseCount + compressionPenalty + widowCount * 0.5;
-                  const isBetter = effectiveSparse < bestEffectiveSparse - 1e-4 || Math.abs(effectiveSparse - bestEffectiveSparse) < 1e-4 && breakCount < bestBreakCount || Math.abs(effectiveSparse - bestEffectiveSparse) < 1e-4 && breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || Math.abs(effectiveSparse - bestEffectiveSparse) < 1e-4 && breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty;
-                  if (isBetter) {
-                    bestEffectiveSparse = effectiveSparse;
+                  if (breakCount < bestBreakCount || breakCount === bestBreakCount && desiredPenalty < bestDesiredPenalty || breakCount === bestBreakCount && Math.abs(desiredPenalty - bestDesiredPenalty) < 1e-4 && currentPenalty < bestCurrentPenalty) {
                     bestBreakCount = breakCount;
                     bestDesiredPenalty = desiredPenalty;
                     bestCurrentPenalty = currentPenalty;
-                    bestText = hyphenResult.text;
+                    bestText = candidateText;
                     bestSpacing = candidate.letterSpacing;
                   }
                 }
@@ -1818,8 +1043,8 @@
                   preparedText,
                   node.width,
                   measurer.measure,
-                  nodeSettings
-                ).text;
+                  settings
+                );
               } finally {
                 measurer.destroy();
               }
@@ -1827,33 +1052,13 @@
           }
           if (transformed !== original) {
             node.characters = transformed;
-            removeSpuriousHyphens(node);
-            if (settings.preventOrphans) {
-              fixOrphansAfterCleanup(node);
-              fixOrphansAfterCleanup(node);
-            }
             hasNodeChanges = true;
-          }
-          if (!isResetMode && !mixedTypography) {
-            if (addHyphensForSparseLines(node, nodeSettings)) {
-              hasNodeChanges = true;
-            }
-          }
-          if (!isResetMode && settings.optimizeLetterSpacing && !mixedTypography) {
-            if (optimizeSparseLineTracking(node, nodeSettings)) {
-              removeSpuriousHyphens(node);
-              if (settings.preventOrphans) {
-                fixOrphansAfterCleanup(node);
-                fixOrphansAfterCleanup(node);
-              }
-              hasNodeChanges = true;
-            }
           }
           if (hasNodeChanges) {
             if (isResetMode) {
               clearNodeSnapshot(node);
             } else {
-              writeNodeSnapshot(node, cleanOriginal, originalLetterSpacing);
+              writeNodeSnapshot(node, original, originalLetterSpacing);
             }
             changedNodes += 1;
           }
@@ -1894,7 +1099,8 @@
   function postUiSettings() {
     figma.ui.postMessage({
       type: "settings",
-      settings: runtimeSettings
+      settings: runtimeSettings,
+      presets: Object.keys(TYPOGRAPHY_PRESETS)
     });
   }
   function postUiDebug(debug) {
@@ -2049,8 +1255,7 @@
         }
         if (message.type === "resize-ui") {
           try {
-            const w = typeof message.width === "number" && message.width > 0 ? Math.round(Math.max(200, Math.min(800, message.width))) : UI_WINDOW_WIDTH;
-            figma.ui.resize(w, normalizeUiHeight(message.height));
+            figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
           } catch (error) {
             console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u0430\u0437\u043C\u0435\u0440 UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
           }
@@ -2060,16 +1265,24 @@
           postUiSettings();
           return;
         }
-        if (message.type === "save-settings") {
-          runtimeSettings = normalizeSettings(__spreadValues(__spreadValues({}, runtimeSettings), message.settings));
+        if (message.type === "select-preset") {
+          const preset = getPresetSettings(message.preset);
+          if (!preset) {
+            postUiStatus("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0442\u0438\u043F\u043E\u0433\u0440\u0430\u0444\u0438\u043A\u0438.", "error");
+            return;
+          }
+          runtimeSettings = preset;
           yield persistRuntimeSettings();
           postUiSettings();
+          postUiStatus(`\u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D \u043F\u0440\u0435\u0441\u0435\u0442: ${message.preset}.`, "info");
           return;
         }
-        if (message.type === "open-external") {
-          if (typeof message.url === "string" && message.url.length > 0) {
-            figma.openExternal(message.url);
-          }
+        if (message.type === "save-settings") {
+          runtimeSettings = normalizeSettings(__spreadProps(__spreadValues(__spreadValues({}, runtimeSettings), message.settings), {
+            preset: CUSTOM_PRESET
+          }));
+          yield persistRuntimeSettings();
+          postUiSettings();
           return;
         }
         if (message.type === APPLY_MODE || message.type === RESET_MODE) {
