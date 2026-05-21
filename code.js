@@ -171,8 +171,8 @@
   // src/code.js
   var Hypher = require_hypher();
   var russianPatterns = require_ru();
-  var ZERO_WIDTH_SPACE = "\u200B";
-  var INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
+  var SOFT_HYPHEN = "\xAD";
+  var INSERTED_BREAK_MARKER = SOFT_HYPHEN;
   var hypher = new Hypher(russianPatterns);
   var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
   var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
@@ -484,7 +484,7 @@
     }
   }
   function countInsertedBreaks(text) {
-    const matches = text.match(/-\u200B/g);
+    const matches = text.match(/\u00AD/g);
     return matches ? matches.length : 0;
   }
   function fitsWithinWidth(text, maxWidth, measureWidth) {

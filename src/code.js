@@ -2,7 +2,8 @@ const Hypher = require("hypher");
 const russianPatterns = require("hyphenation.ru");
 
 const ZERO_WIDTH_SPACE = "\u200B";
-const INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
+const SOFT_HYPHEN = "\u00AD";
+const INSERTED_BREAK_MARKER = SOFT_HYPHEN;
 const hypher = new Hypher(russianPatterns);
 const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
@@ -360,7 +361,7 @@ function clearNodeSnapshot(node) {
 }
 
 function countInsertedBreaks(text) {
-  const matches = text.match(/-\u200B/g);
+  const matches = text.match(/\u00AD/g);
   return matches ? matches.length : 0;
 }
 
