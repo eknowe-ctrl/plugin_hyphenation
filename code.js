@@ -171,8 +171,8 @@
   // src/code.js
   var Hypher = require_hypher();
   var russianPatterns = require_ru();
-  var SOFT_HYPHEN = "\xAD";
-  var INSERTED_BREAK_MARKER = SOFT_HYPHEN;
+  var ZERO_WIDTH_SPACE = "\u200B";
+  var INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
   var hypher = new Hypher(russianPatterns);
   var TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
   var SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
@@ -183,6 +183,7 @@
     aggressive: 2
   };
   var WIDTH_EPSILON = 0.01;
+  var HYPHEN_SAFETY_MARGIN = 1.5;
   var SPARSE_LINE_FILL_THRESHOLD = 0.75;
   var NBSP = "\xA0";
   var AUTO_RECALC_DEBOUNCE_MS = 280;
@@ -484,7 +485,7 @@
     }
   }
   function countInsertedBreaks(text) {
-    const matches = text.match(/\u00AD/g);
+    const matches = text.match(/-\u200B/g);
     return matches ? matches.length : 0;
   }
   function fitsWithinWidth(text, maxWidth, measureWidth) {
@@ -522,8 +523,8 @@
       const widthWithoutDash = measureWidth(leftWithoutDash);
       const widthWithDash = measureWidth(leftWithDash);
       const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
-      const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
-      const fitsWithHangingHyphen = useHangingHyphen && widthWithoutDash <= remainingWidth + WIDTH_EPSILON && widthWithDash <= remainingWidth + dashWidth + 0.5;
+      const fitsNormally = widthWithDash <= remainingWidth - HYPHEN_SAFETY_MARGIN + WIDTH_EPSILON;
+      const fitsWithHangingHyphen = useHangingHyphen && widthWithoutDash <= remainingWidth - HYPHEN_SAFETY_MARGIN + WIDTH_EPSILON && widthWithDash <= remainingWidth + dashWidth + 0.5;
       if (fitsNormally || fitsWithHangingHyphen) {
         return {
           left: `${leading}${leftCore}`,

@@ -2,8 +2,7 @@ const Hypher = require("hypher");
 const russianPatterns = require("hyphenation.ru");
 
 const ZERO_WIDTH_SPACE = "\u200B";
-const SOFT_HYPHEN = "\u00AD";
-const INSERTED_BREAK_MARKER = SOFT_HYPHEN;
+const INSERTED_BREAK_MARKER = `-${ZERO_WIDTH_SPACE}`;
 const hypher = new Hypher(russianPatterns);
 const TOKEN_REGEX = /(\n|[^\S\n]+|[^\s]+)/g;
 const SPACE_TOKEN_REGEX = /^[^\S\n]+$/;
@@ -14,6 +13,7 @@ const HYPHENATION_INTENSITY_ORDER = {
   aggressive: 2
 };
 const WIDTH_EPSILON = 0.01;
+const HYPHEN_SAFETY_MARGIN = 1.5;
 const SPARSE_LINE_FILL_THRESHOLD = 0.75;
 const NBSP = "\u00A0";
 const AUTO_RECALC_DEBOUNCE_MS = 280;
@@ -361,7 +361,7 @@ function clearNodeSnapshot(node) {
 }
 
 function countInsertedBreaks(text) {
-  const matches = text.match(/\u00AD/g);
+  const matches = text.match(/-\u200B/g);
   return matches ? matches.length : 0;
 }
 
@@ -422,10 +422,10 @@ function findBestBreakInToken(token, remainingWidth, measureWidth, options) {
     const widthWithDash = measureWidth(leftWithDash);
     const dashWidth = Math.max(0, widthWithDash - widthWithoutDash);
 
-    const fitsNormally = widthWithDash <= remainingWidth + WIDTH_EPSILON;
+    const fitsNormally = widthWithDash <= remainingWidth - HYPHEN_SAFETY_MARGIN + WIDTH_EPSILON;
     const fitsWithHangingHyphen =
       useHangingHyphen &&
-      widthWithoutDash <= remainingWidth + WIDTH_EPSILON &&
+      widthWithoutDash <= remainingWidth - HYPHEN_SAFETY_MARGIN + WIDTH_EPSILON &&
       widthWithDash <= remainingWidth + dashWidth + 0.5;
 
     if (fitsNormally || fitsWithHangingHyphen) {
