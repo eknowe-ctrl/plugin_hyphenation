@@ -977,6 +977,15 @@
       for (const node of textNodes) {
         try {
           yield loadFontsForNode(node);
+          if (!isResetMode) {
+            const snap = readNodeSnapshot(node);
+            if (snap) {
+              if (node.characters !== snap.text) node.characters = snap.text;
+              if (snap.letterSpacing && !sameLetterSpacing(snap.letterSpacing, getNodeLetterSpacing(node))) {
+                node.letterSpacing = snap.letterSpacing;
+              }
+            }
+          }
           const original = node.characters;
           const originalLetterSpacing = getNodeLetterSpacing(node);
           let transformed = original;
