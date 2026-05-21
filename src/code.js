@@ -22,7 +22,7 @@ const SNAPSHOT_PLUGIN_KEY = "hyphenationSnapshotV4";
 const APPLY_MODE = "apply";
 const RESET_MODE = "reset";
 const CUSTOM_PRESET = "custom";
-const UI_WINDOW_WIDTH = 360;
+const UI_WINDOW_WIDTH = 270;
 const UI_INITIAL_HEIGHT = 760;
 const UI_MIN_HEIGHT = 620;
 const UI_MAX_HEIGHT = 1100;
@@ -1292,7 +1292,8 @@ async function run() {
 
     if (message.type === "resize-ui") {
       try {
-        figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+        const w = (message.width && message.width > 0) ? message.width : UI_WINDOW_WIDTH;
+        figma.ui.resize(w, normalizeUiHeight(message.height));
       } catch (error) {
         console.warn("Не удалось изменить размер UI плагина", error);
       }
@@ -1325,6 +1326,13 @@ async function run() {
       });
       await persistRuntimeSettings();
       postUiSettings();
+      return;
+    }
+
+    if (message.type === "open-external") {
+      if (message.url) {
+        figma.openExternal(message.url);
+      }
       return;
     }
 

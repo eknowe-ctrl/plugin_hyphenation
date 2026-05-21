@@ -1255,7 +1255,8 @@
         }
         if (message.type === "resize-ui") {
           try {
-            figma.ui.resize(UI_WINDOW_WIDTH, normalizeUiHeight(message.height));
+            const w = message.width && message.width > 0 ? message.width : UI_WINDOW_WIDTH;
+            figma.ui.resize(w, normalizeUiHeight(message.height));
           } catch (error) {
             console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u0430\u0437\u043C\u0435\u0440 UI \u043F\u043B\u0430\u0433\u0438\u043D\u0430", error);
           }
