@@ -192,7 +192,7 @@
   var APPLY_MODE = "apply";
   var RESET_MODE = "reset";
   var CUSTOM_PRESET = "custom";
-  var UI_WINDOW_WIDTH = 360;
+  var UI_WINDOW_WIDTH = 270;
   var UI_INITIAL_HEIGHT = 760;
   var UI_MIN_HEIGHT = 620;
   var UI_MAX_HEIGHT = 1100;
@@ -1283,6 +1283,12 @@
           }));
           yield persistRuntimeSettings();
           postUiSettings();
+          return;
+        }
+        if (message.type === "open-external") {
+          if (message.url) {
+            figma.openExternal(message.url);
+          }
           return;
         }
         if (message.type === APPLY_MODE || message.type === RESET_MODE) {
