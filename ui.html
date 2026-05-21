@@ -7,6 +7,8 @@
     @font-face { font-family: "Manrope"; font-weight: 300; src: local("Manrope Light"), local("Manrope-Light"); }
     @font-face { font-family: "Manrope"; font-weight: 400; src: local("Manrope"), local("Manrope Regular"), local("Manrope-Regular"); }
     @font-face { font-family: "Manrope"; font-weight: 500; src: local("Manrope Medium"), local("Manrope-Medium"); }
+    @font-face { font-family: "Manrope"; font-weight: 700; src: local("Manrope Bold"), local("Manrope-Bold"); }
+    @font-face { font-family: "Manrope"; font-weight: 800; src: local("Manrope ExtraBold"), local("Manrope-ExtraBold"); }
     @font-face { font-family: "Roboto";  font-weight: 400; src: local("Roboto"), local("Roboto Regular"), local("Roboto-Regular"); }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -182,15 +184,45 @@
     .num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
     .num-input:focus { box-shadow: 0 0 0 1.5px #ff6f00; }
 
+    /* ── Параметры collapsible ── */
+    .card-params {
+      gap: 0;
+      padding-bottom: 20px;
+    }
+    .card-params.expanded {
+      gap: 30px;
+      padding-bottom: 14px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      align-self: stretch;
+      width: 100%;
+      cursor: pointer;
+      user-select: none;
+    }
+    .chevron {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .chevron svg { transition: transform 0.2s ease; }
+    .card-params.expanded .chevron svg { transform: rotate(90deg); }
+
     /* ── Toggle list ── */
     .toggle-list {
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: flex-start;
       gap: 21px;
       align-self: stretch;
       width: 100%;
     }
+    .card-params.expanded .toggle-list { display: flex; }
     .toggle-row {
       display: flex;
       align-items: center;
@@ -432,12 +464,12 @@
 
       <div class="inline-row">
         <span class="row-label">Минимальная длина слова</span>
-        <input type="number" class="num-inline" id="minWordLen" min="4" max="12" step="1" />
+        <input type="number" class="num-inline" id="minWordLen" min="4" max="12" step="1" value="5" />
       </div>
 
       <div class="inline-row">
         <span class="row-label">Макс. переносов на абзац</span>
-        <input type="number" class="num-inline" id="maxConsec" min="0" max="10" step="1" />
+        <input type="number" class="num-inline" id="maxConsec" min="0" max="10" step="1" value="5" />
       </div>
     </div>
 
@@ -460,14 +492,21 @@
       </div>
       <div class="inline-row-center">
         <span class="row-label">Шаг</span>
-        <input type="number" class="num-inline" id="lsStep" min="0.1" max="2" step="0.1" />
+        <input type="number" class="num-inline" id="lsStep" min="0.1" max="2" step="0.1" value="0.5" />
       </div>
     </div>
 
-    <!-- Параметры -->
-    <div class="card">
-      <div class="card-title">Параметры</div>
-      <div class="toggle-list">
+    <!-- Параметры (collapsible) -->
+    <div class="card card-params" id="params-card">
+      <div class="card-header" id="params-toggle">
+        <span class="card-title">Параметры</span>
+        <div class="chevron">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 1L6 6L1 11" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="toggle-list" id="params-list">
         <div class="toggle-row">
           <span class="row-label">Автопересчёт по ширине</span>
           <label class="switch"><input type="checkbox" id="autoWatch" /><div class="knob"></div></label>
@@ -509,6 +548,13 @@
   var resetBtn     = document.getElementById('reset-btn');
   var statusEl     = document.getElementById('status');
   var hyphenModeEl = document.getElementById('hyphenMode');
+  var paramsCard   = document.getElementById('params-card');
+  var paramsToggle = document.getElementById('params-toggle');
+
+  paramsToggle.addEventListener('click', function() {
+    paramsCard.classList.toggle('expanded');
+    resize();
+  });
 
   var BASE_W       = 360;
   var BASE_MAX_H   = 1100;
